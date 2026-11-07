@@ -1,0 +1,36 @@
+{
+  "name": "Let's Carol",
+  "short_name": "Carol",
+  "description": "Real-time tracking for church caroling groups",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#166534",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["utilities", "navigation"],
+  "shortcuts": [
+    {
+      "name": "Live Tracking",
+      "url": "/tracking/grp-1",
+      "description": "View live team location"
+    },
+    {
+      "name": "Songs",
+      "url": "/songs",
+      "description": "Open the digital songbook"
+    }
+  ]
+}

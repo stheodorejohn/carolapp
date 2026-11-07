@@ -1,0 +1,862 @@
+'use client';
+
+import { useState, useRef, useCallback, type ChangeEvent, type FormEvent } from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import {
+  ChevronLeft, User, MapPin, Phone, StickyNote,
+  Upload, FileSpreadsheet, CheckCircle2, AlertCircle,
+  Plus, Trash2, X, Download,
+} from 'lucide-react';
+import { supabase } from '@/lib/supabase';
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+interface MemberDraft {
+  id: string;
+  name: string;
+  type: 'adult' | 'child';
+  age: string;
+  phone: string;
+}
+
+interface FamilyDraft {
+  name: string;
+  address: string;
+  phone: string;
+  notes: string;
+  spouse: string;
+  children: string;
+  mapsLink: string;
+  latitude: string;
+  longitude: string;
+}
+
+interface ImportRow {
+  name: string;
+  address: string;
+  phone: string;
+  notes: string;
+  spouse: string;
+  children: string;
+  status: 'ok' | 'error';
+  error?: string;
+}
+
+type Tab = 'manual' | 'import';
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function uid() {
+  return Math.random().toString(36).slice(2, 9);
+}
+
+/**
+ * Extracts latitude & longitude from common Google Maps URL formats:
+ * - https://www.google.com/maps/place/.../@13.0827,80.2707,17z/...
+ * - https://maps.google.com/?q=13.0827,80.2707
+ * - https://www.google.com/maps?q=13.0827,80.2707
+ * - https://www.google.com/maps/search/?api=1&query=13.0827,80.2707
+ * Returns { lat, lng } or null if not parseable.
+ */
+function parseGoogleMapsUrl(url: string): { lat: number; lng: number } | null {
+  try {
+    // Pattern 1: /@lat,lng,zoom
+    const atMatch = url.match(/@(-?\d+\.?\d*),(-?\d+\.?\d*)/);
+    if (atMatch) return { lat: parseFloat(atMatch[1]), lng: parseFloat(atMatch[2]) };
+
+    // Pattern 2: ?q=lat,lng or &q=lat,lng
+    const qMatch = url.match(/[?&]q=(-?\d+\.?\d*),(-?\d+\.?\d*)/);
+    if (qMatch) return { lat: parseFloat(qMatch[1]), lng: parseFloat(qMatch[2]) };
+
+    // Pattern 3: query=lat,lng
+    const queryMatch = url.match(/[?&]query=(-?\d+\.?\d*),(-?\d+\.?\d*)/);
+    if (queryMatch) return { lat: parseFloat(queryMatch[1]), lng: parseFloat(queryMatch[2]) };
+
+    // Pattern 4: ll=lat,lng
+    const llMatch = url.match(/[?&]ll=(-?\d+\.?\d*),(-?\d+\.?\d*)/);
+    if (llMatch) return { lat: parseFloat(llMatch[1]), lng: parseFloat(llMatch[2]) };
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
+const TEMPLATE_HEADERS = ['Name *', 'Address *', 'Phone', 'Notes', 'Spouse', 'Children'];
+
+function downloadTemplate() {
+  // Build a minimal CSV template for users to fill in
+  const rows = [
+    TEMPLATE_HEADERS,
+    ['Mary & Joseph', '12, Greenwood Street, Chennai – 600 041', '+91 98765 43210', 'Active in church', 'Mary Mathew', 'Anna (8), Daniel (6)'],
+    ['Abraham Family', '5, Palm Grove, Chennai – 600 034', '+91 98765 55000', '', '', ''],
+  ];
+  const csv = rows.map(r => r.map(c => `"${c}"`).join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'families_template.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ─── Main Page ────────────────────────────────────────────────────────────────
+
+export default function AddFamilyPage() {
+  const router = useRouter();
+  const [tab, setTab] = useState<Tab>('manual');
+
+  return (
+    <div className="page-container bg-slate-50">
+      {/* Header */}
+      <div className="bg-white border-b border-slate-100 px-4 pt-14 pb-4 sticky top-0 z-20">
+        <div className="flex items-center gap-3">
+          <Link
+            href="/families"
+            className="flex items-center justify-center w-8 h-8 rounded-full bg-slate-100"
+          >
+            <ChevronLeft size={18} className="text-slate-600" />
+          </Link>
+          <div>
+            <h1 className="text-base font-bold text-slate-800">Add Family</h1>
+            <p className="text-xs text-slate-400">Manual entry or bulk import</p>
+          </div>
+        </div>
+
+        {/* Tab switcher */}
+        <div className="flex mt-4 bg-slate-100 rounded-xl p-1 gap-1">
+          {(['manual', 'import'] as Tab[]).map(t => (
+            <button
+              key={t}
+              id={`tab-${t}`}
+              onClick={() => setTab(t)}
+              className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all ${
+                tab === t
+                  ? 'bg-white text-slate-800 shadow-sm'
+                  : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              {t === 'manual' ? '✏️ Manual Entry' : '📊 Import Excel / CSV'}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="px-4 pt-4 pb-6">
+        {tab === 'manual' ? (
+          <ManualForm onSuccess={() => router.push('/families')} />
+        ) : (
+          <ImportForm onSuccess={() => router.push('/families')} />
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Manual Form ──────────────────────────────────────────────────────────────
+
+function ManualForm({ onSuccess }: { onSuccess: () => void }) {
+  const [form, setForm] = useState<FamilyDraft>({
+    name: '', address: '', phone: '', notes: '', spouse: '', children: '',
+    mapsLink: '', latitude: '', longitude: '',
+  });
+  const [members, setMembers] = useState<MemberDraft[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [errors, setErrors] = useState<Partial<FamilyDraft>>({});
+  const [locationParsed, setLocationParsed] = useState<{ lat: number; lng: number } | null>(null);
+  const [locationError, setLocationError] = useState('');
+
+  const set = (k: keyof FamilyDraft) => (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+    setForm(f => ({ ...f, [k]: e.target.value }));
+
+  function handleMapsLink(e: ChangeEvent<HTMLInputElement>) {
+    const url = e.target.value;
+    setForm(f => ({ ...f, mapsLink: url }));
+    setLocationError('');
+    setLocationParsed(null);
+
+    if (!url.trim()) return;
+
+    // Short links (maps.app.goo.gl) can't be parsed without following redirect
+    if (url.includes('goo.gl') || url.includes('maps.app')) {
+      setLocationError('Short links can\'t be parsed. Open the link in Google Maps, tap Share → Copy link, and paste the full URL.');
+      return;
+    }
+
+    const coords = parseGoogleMapsUrl(url);
+    if (coords) {
+      setLocationParsed(coords);
+      setForm(f => ({
+        ...f,
+        mapsLink: url,
+        latitude:  coords.lat.toString(),
+        longitude: coords.lng.toString(),
+      }));
+    } else {
+      setLocationError('Could not read coordinates. Try: right-click a spot on Google Maps → "What\'s here?" → copy the lat,lng shown.');
+    }
+  }
+
+  function addMember() {
+    setMembers(m => [...m, { id: uid(), name: '', type: 'adult', age: '', phone: '' }]);
+  }
+
+  function updateMember(id: string, k: keyof MemberDraft, v: string) {
+    setMembers(m => m.map(x => x.id === id ? { ...x, [k]: v } : x));
+  }
+
+  function removeMember(id: string) {
+    setMembers(m => m.filter(x => x.id !== id));
+  }
+
+  function validate() {
+    const e: Partial<FamilyDraft> = {};
+    if (!form.name.trim())    e.name    = 'Family name is required';
+    if (!form.address.trim()) e.address = 'Address is required';
+    setErrors(e);
+    return Object.keys(e).length === 0;
+  }
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    if (!validate()) return;
+    setSaving(true);
+
+    try {
+      // 1. Insert the family row
+      const { data: familyRow, error: familyErr } = await supabase
+        .from('families')
+        .insert({
+          name:      form.name.trim(),
+          address:   form.address.trim(),
+          phone:     form.phone.trim()    || null,
+          notes:     form.notes.trim()    || null,
+          spouse:    form.spouse.trim()   || null,
+          children:  form.children.trim() || null,
+          latitude:  locationParsed?.lat ?? (form.latitude ? parseFloat(form.latitude) : 0),
+          longitude: locationParsed?.lng ?? (form.longitude ? parseFloat(form.longitude) : 0),
+        })
+        .select('id')
+        .single();
+
+      if (familyErr) throw familyErr;
+
+      // 2. Insert family members (if any)
+      if (members.length > 0 && familyRow?.id) {
+        const memberRows = members
+          .filter(m => m.name.trim())
+          .map(m => ({
+            family_id: familyRow.id,
+            name:      m.name.trim(),
+            type:      m.type,
+            age:       m.type === 'child' && m.age ? parseInt(m.age) : null,
+            phone:     m.phone.trim() || null,
+          }));
+
+        if (memberRows.length > 0) {
+          const { error: membersErr } = await supabase
+            .from('family_members')
+            .insert(memberRows);
+          if (membersErr) console.warn('[Supabase] Members insert error:', membersErr);
+        }
+      }
+
+      setSaved(true);
+      setTimeout(onSuccess, 1200);
+    } catch (err) {
+      console.error('[Supabase] Family insert failed:', err);
+      setErrors({ name: 'Failed to save. Please try again.' });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (saved) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 gap-4">
+        <div className="w-16 h-16 rounded-full bg-green-50 flex items-center justify-center">
+          <CheckCircle2 size={32} className="text-green-600" />
+        </div>
+        <p className="font-semibold text-slate-800">Family added!</p>
+        <p className="text-sm text-slate-400">Redirecting…</p>
+      </div>
+    );
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      {/* Family Details */}
+      <div className="carol-card p-4 space-y-4">
+        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Family Details</p>
+
+        <Field
+          id="family-name"
+          label="Family Name"
+          required
+          icon={<User size={15} className="text-slate-400" />}
+          error={errors.name}
+        >
+          <input
+            id="family-name"
+            type="text"
+            placeholder="e.g. Abraham Family"
+            value={form.name}
+            onChange={set('name')}
+            className="carol-input pl-9 py-3 text-sm"
+          />
+        </Field>
+
+        <Field
+          id="family-address"
+          label="Address"
+          required
+          icon={<MapPin size={15} className="text-slate-400" />}
+          error={errors.address}
+        >
+          <textarea
+            id="family-address"
+            placeholder="e.g. 12, Church Road, Chennai – 600 010"
+            value={form.address}
+            onChange={set('address')}
+            rows={2}
+            className="carol-input pl-9 py-3 text-sm resize-none"
+          />
+        </Field>
+
+        <Field
+          id="family-phone"
+          label="Phone"
+          icon={<Phone size={15} className="text-slate-400" />}
+        >
+          <input
+            id="family-phone"
+            type="tel"
+            placeholder="+91 98765 43210"
+            value={form.phone}
+            onChange={set('phone')}
+            className="carol-input pl-9 py-3 text-sm"
+          />
+        </Field>
+
+        <Field
+          id="family-spouse"
+          label="Spouse Name"
+          icon={<User size={15} className="text-slate-400" />}
+        >
+          <input
+            id="family-spouse"
+            type="text"
+            placeholder="Optional"
+            value={form.spouse}
+            onChange={set('spouse')}
+            className="carol-input pl-9 py-3 text-sm"
+          />
+        </Field>
+
+        <Field
+          id="family-children"
+          label="Children"
+          icon={<User size={15} className="text-slate-400" />}
+        >
+          <input
+            id="family-children"
+            type="text"
+            placeholder="e.g. Anna (8), Daniel (6)"
+            value={form.children}
+            onChange={set('children')}
+            className="carol-input pl-9 py-3 text-sm"
+          />
+        </Field>
+
+        <Field
+          id="family-notes"
+          label="Notes"
+          icon={<StickyNote size={15} className="text-slate-400" />}
+        >
+          <textarea
+            id="family-notes"
+            placeholder="Any special notes for the carol team…"
+            value={form.notes}
+            onChange={set('notes')}
+            rows={2}
+            className="carol-input pl-9 py-3 text-sm resize-none"
+          />
+        </Field>
+      </div>
+
+      {/* Location */}
+      <div className="carol-card p-4 space-y-4">
+        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Location</p>
+
+        {/* Google Maps link */}
+        <div>
+          <label htmlFor="maps-link" className="block text-xs font-semibold text-slate-600 mb-1.5">
+            Google Maps Link <span className="text-slate-400 font-normal">(paste to auto-fill coordinates)</span>
+          </label>
+          <div className="relative">
+            <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none">
+              <MapPin size={15} className="text-slate-400" />
+            </div>
+            <input
+              id="maps-link"
+              type="url"
+              placeholder="https://www.google.com/maps/place/.../@13.08,80.27..."
+              value={form.mapsLink}
+              onChange={handleMapsLink}
+              className="carol-input pl-9 py-3 text-sm"
+            />
+          </div>
+          {/* How to get a full link hint */}
+          <p className="text-xs text-slate-400 mt-1">
+            In Google Maps: search the address → tap <strong>Share</strong> → <strong>Copy link</strong>. Use the full URL, not the short goo.gl link.
+          </p>
+          {locationError && (
+            <p className="text-xs text-red-500 mt-1 flex items-center gap-1">
+              <AlertCircle size={11} /> {locationError}
+            </p>
+          )}
+          {locationParsed && (
+            <div className="mt-2 flex items-center gap-2 text-xs text-green-700 bg-green-50 rounded-lg px-3 py-2">
+              <MapPin size={12} className="flex-shrink-0" />
+              <span>Coordinates detected: <strong>{locationParsed.lat.toFixed(6)}, {locationParsed.lng.toFixed(6)}</strong></span>
+            </div>
+          )}
+        </div>
+
+        {/* Manual lat/lng override */}
+        <div className="flex gap-3">
+          <div className="flex-1">
+            <label htmlFor="lat" className="block text-xs font-semibold text-slate-600 mb-1.5">Latitude</label>
+            <input
+              id="lat"
+              type="number"
+              step="any"
+              placeholder="e.g. 13.0827"
+              value={form.latitude}
+              onChange={e => {
+                setForm(f => ({ ...f, latitude: e.target.value }));
+                setLocationParsed(null);
+              }}
+              className="carol-input py-3 text-sm"
+            />
+          </div>
+          <div className="flex-1">
+            <label htmlFor="lng" className="block text-xs font-semibold text-slate-600 mb-1.5">Longitude</label>
+            <input
+              id="lng"
+              type="number"
+              step="any"
+              placeholder="e.g. 80.2707"
+              value={form.longitude}
+              onChange={e => {
+                setForm(f => ({ ...f, longitude: e.target.value }));
+                setLocationParsed(null);
+              }}
+              className="carol-input py-3 text-sm"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Members */}
+      <div className="carol-card p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Members</p>
+          <button
+            type="button"
+            id="add-member-btn"
+            onClick={addMember}
+            className="flex items-center gap-1 text-xs font-semibold text-green-700 hover:text-green-800"
+          >
+            <Plus size={13} /> Add Member
+          </button>
+        </div>
+
+        {members.length === 0 && (
+          <p className="text-sm text-slate-400 text-center py-3">
+            No members yet — tap "Add Member" above
+          </p>
+        )}
+
+        {members.map((m, i) => (
+          <div key={m.id} className="bg-slate-50 rounded-xl p-3 space-y-2">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-xs font-semibold text-slate-500">Member {i + 1}</span>
+              <button
+                type="button"
+                onClick={() => removeMember(m.id)}
+                className="text-slate-400 hover:text-red-500 transition-colors"
+              >
+                <Trash2 size={14} />
+              </button>
+            </div>
+
+            <input
+              type="text"
+              placeholder="Full name"
+              value={m.name}
+              onChange={e => updateMember(m.id, 'name', e.target.value)}
+              className="carol-input py-2.5 text-sm"
+            />
+
+            <div className="flex gap-2">
+              <select
+                value={m.type}
+                onChange={e => updateMember(m.id, 'type', e.target.value)}
+                className="carol-input py-2.5 text-sm flex-1"
+              >
+                <option value="adult">Adult</option>
+                <option value="child">Child</option>
+              </select>
+              {m.type === 'child' && (
+                <input
+                  type="number"
+                  placeholder="Age"
+                  value={m.age}
+                  onChange={e => updateMember(m.id, 'age', e.target.value)}
+                  className="carol-input py-2.5 text-sm w-20"
+                  min={0}
+                  max={17}
+                />
+              )}
+            </div>
+
+            <input
+              type="tel"
+              placeholder="Phone (optional)"
+              value={m.phone}
+              onChange={e => updateMember(m.id, 'phone', e.target.value)}
+              className="carol-input py-2.5 text-sm"
+            />
+          </div>
+        ))}
+      </div>
+
+      {/* Submit */}
+      <button
+        id="save-family-btn"
+        type="submit"
+        disabled={saving}
+        className="btn-primary disabled:opacity-60 disabled:cursor-not-allowed"
+      >
+        {saving ? 'Saving…' : '✅ Save Family'}
+      </button>
+    </form>
+  );
+}
+
+// ─── Field wrapper ────────────────────────────────────────────────────────────
+
+function Field({
+  id, label, required, icon, error, children,
+}: {
+  id: string;
+  label: string;
+  required?: boolean;
+  icon?: React.ReactNode;
+  error?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div>
+      <label htmlFor={id} className="block text-xs font-semibold text-slate-600 mb-1.5">
+        {label}{required && <span className="text-red-500 ml-0.5">*</span>}
+      </label>
+      <div className="relative">
+        {icon && (
+          <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none flex items-start pt-3">
+            {icon}
+          </div>
+        )}
+        {children}
+      </div>
+      {error && (
+        <p className="text-xs text-red-500 mt-1 flex items-center gap-1">
+          <AlertCircle size={11} /> {error}
+        </p>
+      )}
+    </div>
+  );
+}
+
+// ─── Import Form ──────────────────────────────────────────────────────────────
+
+function ImportForm({ onSuccess }: { onSuccess: () => void }) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [dragging, setDragging] = useState(false);
+  const [rows, setRows] = useState<ImportRow[]>([]);
+  const [fileName, setFileName] = useState('');
+  const [importing, setImporting] = useState(false);
+  const [done, setDone] = useState(false);
+  const [parseError, setParseError] = useState('');
+
+  const parseFile = useCallback(async (file: File) => {
+    setParseError('');
+    setRows([]);
+    setFileName(file.name);
+
+    const isCSV  = file.name.endsWith('.csv');
+    const isXLSX = file.name.endsWith('.xlsx') || file.name.endsWith('.xls');
+
+    if (!isCSV && !isXLSX) {
+      setParseError('Please upload a .csv, .xlsx, or .xls file.');
+      return;
+    }
+
+    try {
+      const XLSX = await import('xlsx');
+      const buffer = await file.arrayBuffer();
+      const wb = XLSX.read(buffer, { type: 'array' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const data: string[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+
+      if (data.length < 2) {
+        setParseError('The file appears to be empty or has no data rows.');
+        return;
+      }
+
+      // Skip header row, parse remaining
+      const parsed: ImportRow[] = data.slice(1).map((row): ImportRow => {
+        const name     = String(row[0] ?? '').trim();
+        const address  = String(row[1] ?? '').trim();
+        const phone    = String(row[2] ?? '').trim();
+        const notes    = String(row[3] ?? '').trim();
+        const spouse   = String(row[4] ?? '').trim();
+        const children = String(row[5] ?? '').trim();
+
+        if (!name)    return { name, address, phone, notes, spouse, children, status: 'error', error: 'Name is required' };
+        if (!address) return { name, address, phone, notes, spouse, children, status: 'error', error: 'Address is required' };
+        return { name, address, phone, notes, spouse, children, status: 'ok' };
+      }).filter(r => r.name || r.address); // drop completely blank rows
+
+      setRows(parsed);
+    } catch {
+      setParseError('Could not read the file. Make sure it\'s a valid Excel or CSV file.');
+    }
+  }, []);
+
+  function onFileChange(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (file) parseFile(file);
+    e.target.value = '';
+  }
+
+  function onDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setDragging(false);
+    const file = e.dataTransfer.files[0];
+    if (file) parseFile(file);
+  }
+
+  function removeRow(i: number) {
+    setRows(r => r.filter((_, idx) => idx !== i));
+  }
+
+  const validRows  = rows.filter(r => r.status === 'ok');
+  const errorRows  = rows.filter(r => r.status === 'error');
+
+  async function handleImport() {
+    if (validRows.length === 0) return;
+    setImporting(true);
+
+    try {
+      const rows_to_insert = validRows.map(r => ({
+        name:      r.name.trim(),
+        address:   r.address.trim(),
+        phone:     r.phone?.trim()   || null,
+        notes:     r.notes?.trim()   || null,
+        spouse:    r.spouse?.trim()  || null,
+        children:  r.children?.trim() || null,
+        latitude:  0,
+        longitude: 0,
+      }));
+
+      const { error } = await supabase
+        .from('families')
+        .insert(rows_to_insert);
+
+      if (error) throw error;
+
+      setDone(true);
+      setTimeout(onSuccess, 1400);
+    } catch (err) {
+      console.error('[Supabase] Bulk import failed:', err);
+      setParseError('Import failed. Please check your Supabase connection and try again.');
+    } finally {
+      setImporting(false);
+    }
+  }
+
+  if (done) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 gap-4">
+        <div className="w-16 h-16 rounded-full bg-green-50 flex items-center justify-center">
+          <CheckCircle2 size={32} className="text-green-600" />
+        </div>
+        <p className="font-semibold text-slate-800">{validRows.length} families imported!</p>
+        <p className="text-sm text-slate-400">Redirecting…</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Template download */}
+      <div className="carol-card p-4 flex items-center justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold text-slate-700">Download Template</p>
+          <p className="text-xs text-slate-400 mt-0.5">Fill it in, then upload below</p>
+        </div>
+        <button
+          id="download-template-btn"
+          type="button"
+          onClick={downloadTemplate}
+          className="flex items-center gap-2 text-xs font-semibold text-green-700 border border-green-700 rounded-full px-3 py-2 hover:bg-green-50 transition-colors flex-shrink-0"
+        >
+          <Download size={13} /> CSV Template
+        </button>
+      </div>
+
+      {/* Required columns hint */}
+      <div className="rounded-xl bg-blue-50 border border-blue-100 p-3">
+        <p className="text-xs font-semibold text-blue-700 mb-1">Expected columns (in order)</p>
+        <div className="flex flex-wrap gap-1.5">
+          {TEMPLATE_HEADERS.map(h => (
+            <span key={h} className="text-xs bg-white border border-blue-200 text-blue-600 px-2 py-0.5 rounded-full">
+              {h}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      {/* Drop zone */}
+      <div
+        onDragOver={e => { e.preventDefault(); setDragging(true); }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={onDrop}
+        onClick={() => inputRef.current?.click()}
+        id="file-drop-zone"
+        style={{
+          border: `2px dashed ${dragging ? '#166534' : '#cbd5e1'}`,
+          borderRadius: 16,
+          padding: '32px 24px',
+          background: dragging ? '#f0fdf4' : 'white',
+          textAlign: 'center',
+          cursor: 'pointer',
+          transition: 'all 200ms ease',
+        }}
+      >
+        <input
+          ref={inputRef}
+          type="file"
+          accept=".csv,.xlsx,.xls"
+          onChange={onFileChange}
+          className="hidden"
+          id="file-upload-input"
+        />
+
+        {fileName ? (
+          <div className="flex flex-col items-center gap-2">
+            <FileSpreadsheet size={32} className="text-green-600" />
+            <p className="text-sm font-semibold text-slate-700">{fileName}</p>
+            <p className="text-xs text-slate-400">Tap to change file</p>
+          </div>
+        ) : (
+          <div className="flex flex-col items-center gap-3">
+            <div className="w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center">
+              <Upload size={22} className="text-slate-400" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-slate-700">Drop your file here</p>
+              <p className="text-xs text-slate-400 mt-0.5">or tap to browse · .xlsx, .xls, .csv</p>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Parse error */}
+      {parseError && (
+        <div className="rounded-xl bg-red-50 border border-red-100 p-3 flex items-start gap-2">
+          <AlertCircle size={16} className="text-red-500 flex-shrink-0 mt-0.5" />
+          <p className="text-sm text-red-600">{parseError}</p>
+        </div>
+      )}
+
+      {/* Preview table */}
+      {rows.length > 0 && (
+        <div className="carol-card overflow-hidden">
+          {/* Summary */}
+          <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <span className="text-xs font-semibold text-green-700 bg-green-50 px-2 py-1 rounded-full">
+                ✓ {validRows.length} ready
+              </span>
+              {errorRows.length > 0 && (
+                <span className="text-xs font-semibold text-red-600 bg-red-50 px-2 py-1 rounded-full">
+                  ✗ {errorRows.length} errors
+                </span>
+              )}
+            </div>
+            <span className="text-xs text-slate-400">{rows.length} rows total</span>
+          </div>
+
+          {/* Rows */}
+          <div className="divide-y divide-slate-50 max-h-72 overflow-y-auto">
+            {rows.map((row, i) => (
+              <div
+                key={i}
+                className={`flex items-start gap-3 px-4 py-3 ${
+                  row.status === 'error' ? 'bg-red-50/60' : ''
+                }`}
+              >
+                <div className="flex-1 min-w-0">
+                  <p className={`text-sm font-medium truncate ${
+                    row.status === 'error' ? 'text-red-700' : 'text-slate-800'
+                  }`}>
+                    {row.name || <span className="italic text-slate-400">No name</span>}
+                  </p>
+                  <p className="text-xs text-slate-400 truncate mt-0.5">{row.address || '—'}</p>
+                  {row.error && (
+                    <p className="text-xs text-red-500 mt-0.5 flex items-center gap-1">
+                      <AlertCircle size={10} /> {row.error}
+                    </p>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => removeRow(i)}
+                  className="text-slate-300 hover:text-red-400 transition-colors flex-shrink-0 mt-0.5"
+                  aria-label="Remove row"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+            ))}
+          </div>
+
+          {/* Import button */}
+          <div className="px-4 py-3 border-t border-slate-100">
+            <button
+              id="import-families-btn"
+              type="button"
+              onClick={handleImport}
+              disabled={validRows.length === 0 || importing}
+              className="btn-primary disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {importing
+                ? `Importing ${validRows.length} families…`
+                : `⬆️ Import ${validRows.length} ${validRows.length === 1 ? 'Family' : 'Families'}`}
+            </button>
+            {errorRows.length > 0 && (
+              <p className="text-xs text-slate-400 text-center mt-2">
+                {errorRows.length} row{errorRows.length > 1 ? 's' : ''} with errors will be skipped
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

@@ -1,0 +1,207 @@
+@import "tailwindcss";
+
+/* ─── Design Tokens ─────────────────────────────────────────────────────────── */
+:root {
+  --carol-green: #166534;
+  --carol-green-mid: #15803d;
+  --carol-green-light: #dcfce7;
+  --carol-gold: #d97706;
+  --carol-gold-light: #fef3c7;
+  --carol-red: #dc2626;
+  --carol-orange: #ea580c;
+  --carol-orange-light: #fff7ed;
+  --carol-bg: #f8fafc;
+  --carol-surface: #ffffff;
+  --carol-border: #e2e8f0;
+  --carol-text: #0f172a;
+  --carol-muted: #64748b;
+  --carol-hero-from: #052e16;
+  --carol-hero-to: #166534;
+  --nav-height: 72px;
+}
+
+/* ─── Base ───────────────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body {
+  font-family: 'Inter', system-ui, sans-serif;
+  background-color: var(--carol-bg);
+  color: var(--carol-text);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  scroll-behavior: smooth;
+}
+
+/* Safe area padding for notched phones */
+.safe-bottom { padding-bottom: env(safe-area-inset-bottom, 16px); }
+.safe-top    { padding-top: env(safe-area-inset-top, 0px); }
+
+/* ─── Card ───────────────────────────────────────────────────────────────────── */
+.carol-card {
+  background: var(--carol-surface);
+  border-radius: 16px;
+  box-shadow: 0 1px 3px 0 rgb(0 0 0 / .06), 0 1px 2px -1px rgb(0 0 0 / .06);
+  border: 1px solid var(--carol-border);
+}
+.carol-card-hover {
+  transition: transform 150ms ease, box-shadow 150ms ease;
+}
+.carol-card-hover:active {
+  transform: scale(0.98);
+  box-shadow: 0 0 0 0 transparent;
+}
+
+/* ─── Badges ─────────────────────────────────────────────────────────────────── */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: 9999px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  border-width: 1.5px;
+  border-style: solid;
+}
+.badge-visited  { color: #166534; border-color: #166534; background: #f0fdf4; }
+.badge-pending  { color: #c2410c; border-color: #ea580c; background: #fff7ed; }
+.badge-in-progress { color: #0369a1; border-color: #0284c7; background: #f0f9ff; }
+.badge-live     { color: #166534; border-color: #16a34a; background: #f0fdf4; }
+
+/* ─── Pulse dot ──────────────────────────────────────────────────────────────── */
+.pulse-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 9999px;
+  background: #16a34a;
+  animation: pulse-ring 1.4s cubic-bezier(0.4,0,0.6,1) infinite;
+}
+@keyframes pulse-ring {
+  0%, 100% { box-shadow: 0 0 0 0 rgb(22 163 74 / .7); }
+  50% { box-shadow: 0 0 0 6px rgb(22 163 74 / 0); }
+}
+
+/* ─── Bottom Nav ─────────────────────────────────────────────────────────────── */
+.bottom-nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: var(--nav-height);
+  background: white;
+  border-top: 1px solid var(--carol-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  box-shadow: 0 -4px 20px rgb(0 0 0 / .06);
+  z-index: 50;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* ─── Page container ─────────────────────────────────────────────────────────── */
+.page-container {
+  min-height: 100dvh;
+  padding-bottom: calc(var(--nav-height) + 8px);
+}
+
+/* ─── Hero gradient ──────────────────────────────────────────────────────────── */
+.hero-gradient {
+  background: linear-gradient(160deg, var(--carol-hero-from) 0%, #166534 50%, #15803d 100%);
+}
+
+/* ─── Map ────────────────────────────────────────────────────────────────────── */
+.leaflet-container {
+  font-family: 'Inter', system-ui, sans-serif !important;
+  border-radius: 16px;
+}
+
+/* ─── Scrollbar ──────────────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 9999px; }
+
+/* ─── Button ─────────────────────────────────────────────────────────────────── */
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 14px 24px;
+  border-radius: 9999px;
+  background: var(--carol-green);
+  color: white;
+  font-weight: 600;
+  font-size: 0.95rem;
+  transition: background 150ms ease, transform 100ms ease;
+  cursor: pointer;
+  border: none;
+  outline: none;
+  width: 100%;
+}
+.btn-primary:active { transform: scale(0.97); background: #14532d; }
+.btn-primary:hover { background: #15803d; }
+
+.btn-outline {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 20px;
+  border-radius: 9999px;
+  background: transparent;
+  color: var(--carol-green);
+  font-weight: 600;
+  font-size: 0.875rem;
+  border: 2px solid var(--carol-green);
+  transition: all 150ms ease;
+  cursor: pointer;
+}
+.btn-outline:hover { background: var(--carol-green); color: white; }
+
+/* ─── Input ──────────────────────────────────────────────────────────────────── */
+.carol-input {
+  width: 100%;
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1.5px solid var(--carol-border);
+  background: var(--carol-bg);
+  font-size: 0.95rem;
+  color: var(--carol-text);
+  outline: none;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+.carol-input:focus {
+  border-color: var(--carol-green);
+  box-shadow: 0 0 0 3px rgb(22 101 52 / .12);
+}
+
+/* ─── Timeline ───────────────────────────────────────────────────────────────── */
+.timeline-line {
+  position: absolute;
+  left: 15px;
+  top: 30px;
+  bottom: 0;
+  width: 2px;
+  background: linear-gradient(to bottom, #16a34a, #e2e8f0);
+}
+
+/* ─── Snowflake decoration ───────────────────────────────────────────────────── */
+@keyframes sway {
+  0%, 100% { transform: translateX(0) rotate(0deg); }
+  33% { transform: translateX(4px) rotate(5deg); }
+  66% { transform: translateX(-4px) rotate(-5deg); }
+}
+.sway { animation: sway 4s ease-in-out infinite; }
+
+/* ─── Skeleton shimmer ───────────────────────────────────────────────────────── */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.skeleton {
+  background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  border-radius: 8px;
+}
