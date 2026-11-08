@@ -54,6 +54,7 @@ create table if not exists public.groups (
   name                  text not null,
   leader_id             uuid,
   vehicle_number        text,
+  slug                  text unique,          -- short share URL e.g. "a1" → /live/a1
   is_active             boolean not null default true,
   current_latitude      double precision,
   current_longitude     double precision,
@@ -62,6 +63,9 @@ create table if not exists public.groups (
   last_location_update  timestamptz,
   created_at            timestamptz not null default now()
 );
+
+-- If the table already exists, add the slug column (run once):
+-- alter table public.groups add column if not exists slug text unique;
 
 
 -- ─── ROUTES ───────────────────────────────────────────────────────────────────

@@ -2,16 +2,15 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Home, MapPin, Users, Music, Settings } from 'lucide-react';
+import { Home, MapPin, Music, UsersRound } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Suspense } from 'react';
 
 const NAV_ITEMS = [
-  { href: '/',                label: 'Home',     icon: Home     },
-  { href: '/tracking', label: 'Tracking', icon: MapPin   },
-  { href: '/families',        label: 'Families', icon: Users    },
-  { href: '/songs',           label: 'Songs',    icon: Music    },
-  { href: '/settings',        label: 'Settings', icon: Settings },
+  { href: '/',                   label: 'Home',    icon: Home        },
+  { href: '/tracking',           label: 'Tracking',icon: MapPin      },
+  { href: '/songs',              label: 'Songs',   icon: Music       },
+  { href: '/settings/groups',    label: 'Manage',  icon: UsersRound  },
 ];
 
 /** Inner component that reads usePathname — must be inside <Suspense> */
@@ -20,7 +19,11 @@ function NavItems() {
   return (
     <>
       {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
-        const active = pathname === href || (href !== '/' && pathname.startsWith(href));
+        const active =
+            pathname === href ||
+            (href !== '/' && pathname.startsWith(href)) ||
+            // Treat all /settings/* routes as active for the Manage tab
+            (href === '/settings/groups' && pathname.startsWith('/settings'));
         return (
           <Link
             key={href}

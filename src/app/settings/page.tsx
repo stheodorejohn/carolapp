@@ -1,4 +1,4 @@
-import { Settings, Bell, Shield, Wifi, Info, ChevronRight, LogOut, Users } from 'lucide-react';
+import { Settings, Bell, Shield, Wifi, Info, ChevronRight, LogOut } from 'lucide-react';
 import Link from 'next/link';
 
 export default function SettingsPage() {
@@ -27,19 +27,6 @@ export default function SettingsPage() {
         </div>
 
         {/* Settings groups */}
-        <SettingsGroup title="Carol Team">
-          <Link href="/settings/groups" className="w-full flex items-center gap-3 p-4 text-left hover:bg-slate-50 transition-colors">
-            <span className="flex items-center justify-center w-9 h-9 rounded-xl bg-green-50">
-              <Users size={16} className="text-green-700" />
-            </span>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-slate-700">Carol Groups</p>
-              <p className="text-xs text-slate-400">Create and manage carol groups</p>
-            </div>
-            <ChevronRight size={15} className="text-slate-300" />
-          </Link>
-        </SettingsGroup>
-
         <SettingsGroup title="Preferences">
           <SettingsItem icon={<Bell size={16} className="text-blue-600" />} iconBg="bg-blue-50" label="Notifications" sub="Push notification settings" />
           <SettingsItem icon={<Wifi size={16} className="text-green-600" />} iconBg="bg-green-50" label="Location Sharing" sub="Auto-share duration and interval" />
