@@ -131,11 +131,10 @@ export default function AddFamilyPage() {
               key={t}
               id={`tab-${t}`}
               onClick={() => setTab(t)}
-              className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all ${
-                tab === t
+              className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all ${tab === t
                   ? 'bg-white text-slate-800 shadow-sm'
                   : 'text-slate-500 hover:text-slate-700'
-              }`}
+                }`}
             >
               {t === 'manual' ? '✏️ Manual Entry' : '📊 Import Excel / CSV'}
             </button>
@@ -171,6 +170,19 @@ function ManualForm({ onSuccess }: { onSuccess: () => void }) {
   const set = (k: keyof FamilyDraft) => (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
     setForm(f => ({ ...f, [k]: e.target.value }));
 
+  // Allow only digits, +, -, spaces in phone fields
+  function handlePhone(e: ChangeEvent<HTMLInputElement>) {
+    const val = e.target.value.replace(/[^0-9+\- ]/g, '');
+    setForm(f => ({ ...f, phone: val }));
+  }
+
+  function phoneWarnMsg(val: string): string {
+    const digits = val.replace(/\D/g, '').length;
+    if (digits > 15) return 'Number seems too long — please double-check.';
+    if (digits > 10) return 'More than 10 digits. If this is a landline, include STD code (e.g. 044-XXXXXXXX).';
+    return '';
+  }
+
   function handleMapsLink(e: ChangeEvent<HTMLInputElement>) {
     const url = e.target.value;
     setForm(f => ({ ...f, mapsLink: url }));
@@ -179,9 +191,9 @@ function ManualForm({ onSuccess }: { onSuccess: () => void }) {
 
     if (!url.trim()) return;
 
-    // Short links (maps.app.goo.gl) can't be parsed without following redirect
+    // Short links (maps.app.goo.gl) — save the link but note coords can't be auto-parsed
     if (url.includes('goo.gl') || url.includes('maps.app')) {
-      setLocationError('Short links can\'t be parsed. Open the link in Google Maps, tap Share → Copy link, and paste the full URL.');
+      setLocationError('Short link saved ✓ — coordinates can\'t be auto-read from this URL. Enter lat/lng manually below if needed.');
       return;
     }
 
@@ -191,7 +203,7 @@ function ManualForm({ onSuccess }: { onSuccess: () => void }) {
       setForm(f => ({
         ...f,
         mapsLink: url,
-        latitude:  coords.lat.toString(),
+        latitude: coords.lat.toString(),
         longitude: coords.lng.toString(),
       }));
     } else {
@@ -213,7 +225,7 @@ function ManualForm({ onSuccess }: { onSuccess: () => void }) {
 
   function validate() {
     const e: Partial<FamilyDraft> = {};
-    if (!form.name.trim())    e.name    = 'Family name is required';
+    if (!form.name.trim()) e.name = 'Family name is required';
     if (!form.address.trim()) e.address = 'Address is required';
     setErrors(e);
     return Object.keys(e).length === 0;
@@ -229,13 +241,13 @@ function ManualForm({ onSuccess }: { onSuccess: () => void }) {
       const { data: familyRow, error: familyErr } = await supabase
         .from('families')
         .insert({
-          name:      form.name.trim(),
-          address:   form.address.trim(),
-          phone:     form.phone.trim()    || null,
-          notes:     form.notes.trim()    || null,
-          spouse:    form.spouse.trim()   || null,
-          children:  form.children.trim() || null,
-          latitude:  locationParsed?.lat ?? (form.latitude ? parseFloat(form.latitude) : 0),
+          name: form.name.trim(),
+          address: form.address.trim(),
+          phone: form.phone.trim() || null,
+          notes: form.notes.trim() || null,
+          spouse: form.spouse.trim() || null,
+          children: form.children.trim() || null,
+          latitude: locationParsed?.lat ?? (form.latitude ? parseFloat(form.latitude) : 0),
           longitude: locationParsed?.lng ?? (form.longitude ? parseFloat(form.longitude) : 0),
         })
         .select('id')
@@ -249,10 +261,10 @@ function ManualForm({ onSuccess }: { onSuccess: () => void }) {
           .filter(m => m.name.trim())
           .map(m => ({
             family_id: familyRow.id,
-            name:      m.name.trim(),
-            type:      m.type,
-            age:       m.type === 'child' && m.age ? parseInt(m.age) : null,
-            phone:     m.phone.trim() || null,
+            name: m.name.trim(),
+            type: m.type,
+            age: m.type === 'child' && m.age ? parseInt(m.age) : null,
+            phone: m.phone.trim() || null,
           }));
 
         if (memberRows.length > 0) {
@@ -304,7 +316,7 @@ function ManualForm({ onSuccess }: { onSuccess: () => void }) {
             placeholder="e.g. Abraham Family"
             value={form.name}
             onChange={set('name')}
-            className="carol-input pl-9 py-3 text-sm"
+            className="carol-input !pl-9 py-3 text-sm"
           />
         </Field>
 
@@ -321,7 +333,7 @@ function ManualForm({ onSuccess }: { onSuccess: () => void }) {
             value={form.address}
             onChange={set('address')}
             rows={2}
-            className="carol-input pl-9 py-3 text-sm resize-none"
+            className="carol-input !pl-9 py-3 text-sm resize-none"
           />
         </Field>
 
@@ -329,14 +341,16 @@ function ManualForm({ onSuccess }: { onSuccess: () => void }) {
           id="family-phone"
           label="Phone"
           icon={<Phone size={15} className="text-slate-400" />}
+          warn={phoneWarnMsg(form.phone)}
         >
           <input
             id="family-phone"
             type="tel"
             placeholder="+91 98765 43210"
             value={form.phone}
-            onChange={set('phone')}
-            className="carol-input pl-9 py-3 text-sm"
+            onChange={handlePhone}
+            className="carol-input !pl-9 py-3 text-sm"
+            inputMode="tel"
           />
         </Field>
 
@@ -351,7 +365,7 @@ function ManualForm({ onSuccess }: { onSuccess: () => void }) {
             placeholder="Optional"
             value={form.spouse}
             onChange={set('spouse')}
-            className="carol-input pl-9 py-3 text-sm"
+            className="carol-input !pl-9 py-3 text-sm"
           />
         </Field>
 
@@ -366,7 +380,7 @@ function ManualForm({ onSuccess }: { onSuccess: () => void }) {
             placeholder="e.g. Anna (8), Daniel (6)"
             value={form.children}
             onChange={set('children')}
-            className="carol-input pl-9 py-3 text-sm"
+            className="carol-input !pl-9 py-3 text-sm"
           />
         </Field>
 
@@ -381,7 +395,7 @@ function ManualForm({ onSuccess }: { onSuccess: () => void }) {
             value={form.notes}
             onChange={set('notes')}
             rows={2}
-            className="carol-input pl-9 py-3 text-sm resize-none"
+            className="carol-input !pl-9 py-3 text-sm resize-none"
           />
         </Field>
       </div>
@@ -396,21 +410,21 @@ function ManualForm({ onSuccess }: { onSuccess: () => void }) {
             Google Maps Link <span className="text-slate-400 font-normal">(paste to auto-fill coordinates)</span>
           </label>
           <div className="relative">
-            <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none">
+            <div className="absolute left-3 inset-y-0 flex items-center pointer-events-none">
               <MapPin size={15} className="text-slate-400" />
             </div>
             <input
               id="maps-link"
               type="url"
-              placeholder="https://www.google.com/maps/place/.../@13.08,80.27..."
+              placeholder="https://maps.app.goo.gl/... or full Google Maps URL"
               value={form.mapsLink}
               onChange={handleMapsLink}
-              className="carol-input pl-9 py-3 text-sm"
+              className="carol-input !pl-9 py-3 text-sm"
             />
           </div>
           {/* How to get a full link hint */}
           <p className="text-xs text-slate-400 mt-1">
-            In Google Maps: search the address → tap <strong>Share</strong> → <strong>Copy link</strong>. Use the full URL, not the short goo.gl link.
+            Paste a Google Maps link — full URL or short link (maps.app.goo.gl). Full URLs auto-fill coordinates.
           </p>
           {locationError && (
             <p className="text-xs text-red-500 mt-1 flex items-center gap-1">
@@ -501,35 +515,55 @@ function ManualForm({ onSuccess }: { onSuccess: () => void }) {
               className="carol-input py-2.5 text-sm"
             />
 
-            <div className="flex gap-2">
-              <select
-                value={m.type}
-                onChange={e => updateMember(m.id, 'type', e.target.value)}
-                className="carol-input py-2.5 text-sm flex-1"
-              >
-                <option value="adult">Adult</option>
-                <option value="child">Child</option>
-              </select>
+            <div className="flex items-center gap-2">
+              {(['adult', 'child'] as const).map(type => (
+                <label
+                  key={type}
+                  className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-semibold cursor-pointer transition-colors select-none ${m.type === type
+                      ? 'bg-green-50 border-green-300 text-green-700'
+                      : 'bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100'
+                    }`}
+                >
+                  <input
+                    type="radio"
+                    name={`member-type-${m.id}`}
+                    value={type}
+                    checked={m.type === type}
+                    onChange={() => updateMember(m.id, 'type', type)}
+                    className="sr-only"
+                  />
+                  <span>{type === 'adult' ? '🧑' : '👶'}</span>
+                  <span>{type === 'adult' ? 'Adult' : 'Child'}</span>
+                </label>
+              ))}
               {m.type === 'child' && (
                 <input
                   type="number"
                   placeholder="Age"
                   value={m.age}
                   onChange={e => updateMember(m.id, 'age', e.target.value)}
-                  className="carol-input py-2.5 text-sm w-20"
+                  className="carol-input py-2 text-sm w-20"
                   min={0}
                   max={17}
                 />
               )}
             </div>
 
-            <input
-              type="tel"
-              placeholder="Phone (optional)"
-              value={m.phone}
-              onChange={e => updateMember(m.id, 'phone', e.target.value)}
-              className="carol-input py-2.5 text-sm"
-            />
+            <div>
+              <input
+                type="tel"
+                placeholder="Phone (optional)"
+                value={m.phone}
+                onChange={e => updateMember(m.id, 'phone', e.target.value.replace(/[^0-9+\- ]/g, ''))}
+                className="carol-input py-2.5 text-sm"
+                inputMode="tel"
+              />
+              {phoneWarnMsg(m.phone) && (
+                <p className="text-xs text-orange-500 mt-1 flex items-center gap-1">
+                  <AlertCircle size={11} /> {phoneWarnMsg(m.phone)}
+                </p>
+              )}
+            </div>
           </div>
         ))}
       </div>
@@ -550,13 +584,14 @@ function ManualForm({ onSuccess }: { onSuccess: () => void }) {
 // ─── Field wrapper ────────────────────────────────────────────────────────────
 
 function Field({
-  id, label, required, icon, error, children,
+  id, label, required, icon, error, warn, children,
 }: {
   id: string;
   label: string;
   required?: boolean;
   icon?: React.ReactNode;
   error?: string;
+  warn?: string;
   children: React.ReactNode;
 }) {
   return (
@@ -564,17 +599,22 @@ function Field({
       <label htmlFor={id} className="block text-xs font-semibold text-slate-600 mb-1.5">
         {label}{required && <span className="text-red-500 ml-0.5">*</span>}
       </label>
-      <div className="relative">
+      <div className="relative flex items-center">
         {icon && (
-          <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none flex items-start pt-3">
+          <span className="absolute left-3 pointer-events-none flex items-center">
             {icon}
-          </div>
+          </span>
         )}
         {children}
       </div>
       {error && (
         <p className="text-xs text-red-500 mt-1 flex items-center gap-1">
           <AlertCircle size={11} /> {error}
+        </p>
+      )}
+      {!error && warn && (
+        <p className="text-xs text-orange-500 mt-1 flex items-center gap-1">
+          <AlertCircle size={11} /> {warn}
         </p>
       )}
     </div>
@@ -597,7 +637,7 @@ function ImportForm({ onSuccess }: { onSuccess: () => void }) {
     setRows([]);
     setFileName(file.name);
 
-    const isCSV  = file.name.endsWith('.csv');
+    const isCSV = file.name.endsWith('.csv');
     const isXLSX = file.name.endsWith('.xlsx') || file.name.endsWith('.xls');
 
     if (!isCSV && !isXLSX) {
@@ -619,14 +659,14 @@ function ImportForm({ onSuccess }: { onSuccess: () => void }) {
 
       // Skip header row, parse remaining
       const parsed: ImportRow[] = data.slice(1).map((row): ImportRow => {
-        const name     = String(row[0] ?? '').trim();
-        const address  = String(row[1] ?? '').trim();
-        const phone    = String(row[2] ?? '').trim();
-        const notes    = String(row[3] ?? '').trim();
-        const spouse   = String(row[4] ?? '').trim();
+        const name = String(row[0] ?? '').trim();
+        const address = String(row[1] ?? '').trim();
+        const phone = String(row[2] ?? '').trim();
+        const notes = String(row[3] ?? '').trim();
+        const spouse = String(row[4] ?? '').trim();
         const children = String(row[5] ?? '').trim();
 
-        if (!name)    return { name, address, phone, notes, spouse, children, status: 'error', error: 'Name is required' };
+        if (!name) return { name, address, phone, notes, spouse, children, status: 'error', error: 'Name is required' };
         if (!address) return { name, address, phone, notes, spouse, children, status: 'error', error: 'Address is required' };
         return { name, address, phone, notes, spouse, children, status: 'ok' };
       }).filter(r => r.name || r.address); // drop completely blank rows
@@ -654,8 +694,8 @@ function ImportForm({ onSuccess }: { onSuccess: () => void }) {
     setRows(r => r.filter((_, idx) => idx !== i));
   }
 
-  const validRows  = rows.filter(r => r.status === 'ok');
-  const errorRows  = rows.filter(r => r.status === 'error');
+  const validRows = rows.filter(r => r.status === 'ok');
+  const errorRows = rows.filter(r => r.status === 'error');
 
   async function handleImport() {
     if (validRows.length === 0) return;
@@ -663,13 +703,13 @@ function ImportForm({ onSuccess }: { onSuccess: () => void }) {
 
     try {
       const rows_to_insert = validRows.map(r => ({
-        name:      r.name.trim(),
-        address:   r.address.trim(),
-        phone:     r.phone?.trim()   || null,
-        notes:     r.notes?.trim()   || null,
-        spouse:    r.spouse?.trim()  || null,
-        children:  r.children?.trim() || null,
-        latitude:  0,
+        name: r.name.trim(),
+        address: r.address.trim(),
+        phone: r.phone?.trim() || null,
+        notes: r.notes?.trim() || null,
+        spouse: r.spouse?.trim() || null,
+        children: r.children?.trim() || null,
+        latitude: 0,
         longitude: 0,
       }));
 
@@ -807,14 +847,12 @@ function ImportForm({ onSuccess }: { onSuccess: () => void }) {
             {rows.map((row, i) => (
               <div
                 key={i}
-                className={`flex items-start gap-3 px-4 py-3 ${
-                  row.status === 'error' ? 'bg-red-50/60' : ''
-                }`}
+                className={`flex items-start gap-3 px-4 py-3 ${row.status === 'error' ? 'bg-red-50/60' : ''
+                  }`}
               >
                 <div className="flex-1 min-w-0">
-                  <p className={`text-sm font-medium truncate ${
-                    row.status === 'error' ? 'text-red-700' : 'text-slate-800'
-                  }`}>
+                  <p className={`text-sm font-medium truncate ${row.status === 'error' ? 'text-red-700' : 'text-slate-800'
+                    }`}>
                     {row.name || <span className="italic text-slate-400">No name</span>}
                   </p>
                   <p className="text-xs text-slate-400 truncate mt-0.5">{row.address || '—'}</p>

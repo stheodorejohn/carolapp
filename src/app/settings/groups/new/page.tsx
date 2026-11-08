@@ -84,17 +84,17 @@ export default function NewGroupPage() {
               <label htmlFor="group-name" className="block text-xs font-semibold text-slate-600 mb-1.5">
                 Group Name <span className="text-red-500">*</span>
               </label>
-              <div className="relative">
-                <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none">
+              <div className="relative flex items-center">
+                <span className="absolute left-3 pointer-events-none flex items-center">
                   <Users size={15} className="text-slate-400" />
-                </div>
+                </span>
                 <input
                   id="group-name"
                   type="text"
                   placeholder="e.g. Carol Team Alpha"
                   value={form.name}
                   onChange={set('name')}
-                  className="carol-input pl-9 py-3 text-sm"
+                  className="carol-input !pl-9 py-3 text-sm"
                 />
               </div>
             </div>
@@ -104,17 +104,17 @@ export default function NewGroupPage() {
               <label htmlFor="vehicle-number" className="block text-xs font-semibold text-slate-600 mb-1.5">
                 Vehicle Number <span className="text-slate-400 font-normal">(optional)</span>
               </label>
-              <div className="relative">
-                <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none">
+              <div className="relative flex items-center">
+                <span className="absolute left-3 pointer-events-none flex items-center">
                   <Car size={15} className="text-slate-400" />
-                </div>
+                </span>
                 <input
                   id="vehicle-number"
                   type="text"
                   placeholder="e.g. TN 01 AB 1234"
                   value={form.vehicle_number}
                   onChange={set('vehicle_number')}
-                  className="carol-input pl-9 py-3 text-sm"
+                  className="carol-input !pl-9 py-3 text-sm"
                 />
               </div>
             </div>

@@ -59,7 +59,7 @@ export default function SongsPage() {
           </a>
         </div>
         <div className="relative">
-          <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+          <Search size={15} className="absolute left-3.5 inset-y-0 my-auto text-slate-400" />
           <input
             id="song-search"
             type="search"
