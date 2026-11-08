@@ -2,7 +2,7 @@
 
 import { useEffect, useState, use, Suspense } from 'react';
 import Link from 'next/link';
-import { ChevronLeft, Phone, MessageSquare, Navigation, Users, ChevronDown } from 'lucide-react';
+import { ChevronLeft, Phone, MessageSquare, Navigation, Users } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { formatTime, formatDate } from '@/lib/utils';
@@ -14,9 +14,9 @@ interface Props {
 
 function RouteStopContent({ params }: Props) {
   const { stopId } = use(params);
-  const [route, setRoute]         = useState<Route | null>(null);
-  const [loading, setLoading]     = useState(true);
-  const [saving, setSaving]       = useState(false);
+  const [route, setRoute] = useState<Route | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [visitNotes, setVisitNotes] = useState('');
   const [showSuccess, setShowSuccess] = useState(false);
   const [nextRoute, setNextRoute] = useState<Route | null>(null);
@@ -26,7 +26,7 @@ function RouteStopContent({ params }: Props) {
       try {
         const { data, error } = await supabase
           .from('routes')
-          .select('*, family:families(*)')
+          .select('*, family:families(*, members:family_members(*))')
           .eq('id', stopId)
           .single();
         if (error) throw error;
@@ -37,7 +37,7 @@ function RouteStopContent({ params }: Props) {
         // Prefetch the next stop (next order_index in same group)
         const { data: nextData } = await supabase
           .from('routes')
-          .select('*, family:families(*)')
+          .select('*, family:families(*, members:family_members(*))')
           .eq('group_id', r.group_id)
           .gt('order_index', r.order_index)
           .neq('status', 'visited')
@@ -54,6 +54,20 @@ function RouteStopContent({ params }: Props) {
     load();
   }, [stopId]);
 
+  async function handleMarkArrived() {
+    if (!route || saving) return;
+    setSaving(true);
+    const now = new Date().toISOString();
+    const { data, error } = await supabase
+      .from('routes')
+      .update({ status: 'arrived', arrived_at: now })
+      .eq('id', stopId)
+      .select('*, family:families(*, members:family_members(*))')
+      .single();
+    if (!error && data) setRoute(data as Route);
+    setSaving(false);
+  }
+
   async function handleCheckIn() {
     if (!route || saving) return;
     setSaving(true);
@@ -62,7 +76,7 @@ function RouteStopContent({ params }: Props) {
       .from('routes')
       .update({ status: 'in_progress', checked_in_at: now })
       .eq('id', stopId)
-      .select('*, family:families(*)')
+      .select('*, family:families(*, members:family_members(*))')
       .single();
     if (!error && data) setRoute(data as Route);
     setSaving(false);
@@ -76,7 +90,7 @@ function RouteStopContent({ params }: Props) {
       .from('routes')
       .update({ status: 'visited', checked_out_at: now, visit_notes: visitNotes || null })
       .eq('id', stopId)
-      .select('*, family:families(*)')
+      .select('*, family:families(*, members:family_members(*))')
       .single();
     if (!error && data) {
       setRoute(data as Route);
@@ -122,7 +136,8 @@ function RouteStopContent({ params }: Props) {
   }
 
   const family = route.family!;
-  const checkedIn  = route.status === 'in_progress' || route.status === 'visited';
+  const arrived = route.status === 'arrived' || route.status === 'in_progress' || route.status === 'visited';
+  const checkedIn = route.status === 'in_progress' || route.status === 'visited';
   const checkedOut = route.status === 'visited';
 
   return (
@@ -139,37 +154,6 @@ function RouteStopContent({ params }: Props) {
       </div>
 
       <div className="px-4 pt-4 space-y-4 pb-8">
-        {/* Family info */}
-        <div className="carol-card p-4">
-          <div className="flex items-start gap-3">
-            <span className="flex items-center justify-center w-12 h-12 rounded-2xl bg-green-50 flex-shrink-0">
-              <Users size={22} className="text-green-700" />
-            </span>
-            <div className="flex-1 min-w-0">
-              <h2 className="font-bold text-slate-800 text-base">{family.name}</h2>
-              <p className="text-sm text-slate-400 mt-0.5">{family.address}</p>
-            </div>
-          </div>
-
-          <div className="flex gap-2 mt-4">
-            {family.phone && (
-              <>
-                <a href={`tel:${family.phone}`} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-600 text-sm font-medium">
-                  <Phone size={15} /> Call
-                </a>
-                <a href={`https://wa.me/${family.phone.replace(/\D/g, '')}`} target="_blank" rel="noreferrer" className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-green-50 border border-green-200 text-green-700 text-sm font-medium">
-                  <MessageSquare size={15} /> WhatsApp
-                </a>
-              </>
-            )}
-            {(family.latitude !== 0 || family.longitude !== 0) && (
-              <a href={`https://maps.google.com/?q=${family.latitude},${family.longitude}`} target="_blank" rel="noreferrer" className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-blue-50 border border-blue-200 text-blue-700 text-sm font-medium">
-                <Navigation size={15} /> Directions
-              </a>
-            )}
-          </div>
-        </div>
-
         {/* ETA */}
         {route.eta && (
           <div className="carol-card p-4">
@@ -182,18 +166,161 @@ function RouteStopContent({ params }: Props) {
           </div>
         )}
 
+        {/* Family Details — read-only */}
+        <div className="carol-card p-4">
+          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-4">Family Details</p>
+
+          <div className="space-y-3">
+            {/* Name */}
+            <div>
+              <p className="text-xs text-slate-400 mb-0.5">Family Name</p>
+              <p className="text-sm font-semibold text-slate-800">{family.name}</p>
+            </div>
+
+            {/* Address */}
+            <div>
+              <p className="text-xs text-slate-400 mb-0.5">Address</p>
+              <p className="text-sm text-slate-700">{family.address}</p>
+            </div>
+
+            {/* Phone */}
+            {family.phone && (
+              <div>
+                <p className="text-xs text-slate-400 mb-0.5">Phone</p>
+                <p className="text-sm text-slate-700">{family.phone}</p>
+              </div>
+            )}
+
+            {/* Spouse */}
+            {family.spouse && (
+              <div>
+                <p className="text-xs text-slate-400 mb-0.5">Spouse</p>
+                <p className="text-sm text-slate-700">{family.spouse}</p>
+              </div>
+            )}
+
+            {/* Children */}
+            {family.children && (
+              <div>
+                <p className="text-xs text-slate-400 mb-0.5">Children</p>
+                <p className="text-sm text-slate-700">{family.children}</p>
+              </div>
+            )}
+
+            {/* Members */}
+            {family.members && family.members.length > 0 && (
+              <div>
+                <p className="text-xs text-slate-400 mb-1.5">
+                  Members <span className="text-slate-300">({family.members.length})</span>
+                </p>
+                <div className="space-y-2">
+                  {family.members.map((m) => (
+                    <div key={m.id} className="bg-slate-50 rounded-xl px-3 py-2.5">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm text-slate-800 font-semibold truncate flex items-center gap-1.5 flex-wrap">
+                            <span>{m.name}</span>
+                            {m.relation && (
+                              <span className="text-[11px] font-normal text-green-700 bg-green-50 px-2 py-0.5 rounded-full border border-green-200">
+                                {m.relation}
+                              </span>
+                            )}
+                          </p>
+                          <p className="text-xs text-slate-400 capitalize mt-0.5">
+                            {m.type === 'adult' ? '🧑 Adult' : '👶 Child'}
+                            {m.age != null ? ` · ${m.age} yrs` : ''}
+                          </p>
+                        </div>
+                        {m.phone && (
+                          <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                            <p className="text-xs text-slate-600">{m.phone}</p>
+                            <div className="flex gap-1">
+                              <a
+                                href={`tel:${m.phone}`}
+                                className="flex items-center gap-1 text-xs text-slate-500 bg-white border border-slate-200 rounded-lg px-2 py-1"
+                              >
+                                <Phone size={11} /> Call
+                              </a>
+                              <a
+                                href={`https://wa.me/${m.phone.replace(/\D/g, '')}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="flex items-center gap-1 text-xs text-green-700 bg-green-50 border border-green-200 rounded-lg px-2 py-1"
+                              >
+                                <MessageSquare size={11} /> WA
+                              </a>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Notes */}
+            <div>
+              <p className="text-xs text-slate-400 mb-0.5">Notes</p>
+              {family.notes
+                ? <p className="text-sm text-slate-600 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2 leading-relaxed">{family.notes}</p>
+                : <p className="text-sm text-slate-300 italic">No notes</p>
+              }
+            </div>
+
+            {/* Google Maps location */}
+            {(family.latitude !== 0 || family.longitude !== 0) && (
+              <div>
+                <p className="text-xs text-slate-400 mb-0.5">Location</p>
+                <a
+                  href={`https://maps.google.com/?q=${family.latitude},${family.longitude}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-2 text-sm text-blue-600 bg-blue-50 border border-blue-100 rounded-xl px-3 py-2 w-full"
+                >
+                  <Navigation size={14} className="flex-shrink-0 text-blue-500" />
+                  <span className="flex-1 truncate">
+                    {family.latitude.toFixed(5)}, {family.longitude.toFixed(5)}
+                  </span>
+                  <span className="text-xs text-blue-400 flex-shrink-0">Open ↗</span>
+                </a>
+              </div>
+            )}
+
+            {/* Quick actions */}
+            {(family.phone || family.latitude !== 0 || family.longitude !== 0) && (
+              <div className="flex gap-2 pt-1">
+                {family.phone && (
+                  <>
+                    <a href={`tel:${family.phone}`} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-600 text-sm font-medium">
+                      <Phone size={15} /> Call
+                    </a>
+                    <a href={`https://wa.me/${family.phone.replace(/\D/g, '')}`} target="_blank" rel="noreferrer" className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-green-50 border border-green-200 text-green-700 text-sm font-medium">
+                      <MessageSquare size={15} /> WhatsApp
+                    </a>
+                  </>
+                )}
+                {(family.latitude !== 0 || family.longitude !== 0) && (
+                  <a href={`https://maps.google.com/?q=${family.latitude},${family.longitude}`} target="_blank" rel="noreferrer" className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-blue-50 border border-blue-200 text-blue-700 text-sm font-medium">
+                    <Navigation size={15} /> Directions
+                  </a>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
         {/* Visit Status */}
         <div className="carol-card p-4">
           <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-4">Visit Status</p>
 
           <div className="flex gap-2 mb-4">
             {(['Arrived', 'Checked In', 'Checked Out'] as const).map((step) => (
-              <div key={step} className={`flex-1 py-2 rounded-full text-xs font-semibold border text-center transition-colors ${
-                (step === 'Arrived'     && checkedIn)  ? 'bg-green-700 text-white border-green-700' :
-                (step === 'Checked In'  && checkedIn)  ? 'bg-green-700 text-white border-green-700' :
-                (step === 'Checked Out' && checkedOut) ? 'bg-green-700 text-white border-green-700' :
-                'bg-white text-slate-500 border-slate-200'
-              }`}>
+              <div key={step} className={`flex-1 py-2 rounded-full text-xs font-semibold border text-center transition-colors ${(step === 'Arrived' && arrived) ? 'bg-green-700 text-white border-green-700' :
+                  (step === 'Checked In' && checkedIn) ? 'bg-green-700 text-white border-green-700' :
+                    (step === 'Checked Out' && checkedOut) ? 'bg-green-700 text-white border-green-700' :
+                      'bg-white text-slate-500 border-slate-200'
+                }`}>
                 {step}
               </div>
             ))}
@@ -201,8 +328,8 @@ function RouteStopContent({ params }: Props) {
 
           {/* Timeline */}
           <div className="space-y-3 relative">
-            <TimelineEvent label="Arrived"     time={formatTime(route.checked_in_at)}  done={checkedIn}  />
-            <TimelineEvent label="Checked In"  time={formatTime(route.checked_in_at)}  done={checkedIn}  />
+            <TimelineEvent label="Arrived" time={formatTime(route.arrived_at)} done={arrived} />
+            <TimelineEvent label="Checked In" time={formatTime(route.checked_in_at)} done={checkedIn} />
             <TimelineEvent label="Checked Out" time={formatTime(route.checked_out_at)} done={checkedOut} />
           </div>
 
@@ -223,15 +350,17 @@ function RouteStopContent({ params }: Props) {
           </div>
         </div>
 
-        {/* Family details link */}
-        <Link href={`/families/${family.id}`} className="carol-card carol-card-hover flex items-center gap-3 p-4 block">
-          <Users size={18} className="text-green-700" />
-          <span className="flex-1 text-sm font-medium text-slate-700">Family Details</span>
-          <ChevronDown size={16} className="text-slate-300 rotate-[-90deg]" />
-        </Link>
-
         {/* Check In / Out button */}
-        {!checkedIn ? (
+        {!arrived ? (
+          <button
+            id="mark-arrived-btn"
+            onClick={handleMarkArrived}
+            disabled={saving}
+            className="btn-primary disabled:opacity-60"
+          >
+            {saving ? 'Saving…' : '📍 Mark as Arrived'}
+          </button>
+        ) : !checkedIn ? (
           <button
             id="check-in-btn"
             onClick={handleCheckIn}
@@ -262,10 +391,9 @@ function RouteStopContent({ params }: Props) {
 function TimelineEvent({ label, time, done }: { label: string; time: string | null; done: boolean }) {
   return (
     <div className="flex items-center gap-3">
-      <span className={`w-5 h-5 rounded-full border-2 flex-shrink-0 flex items-center justify-center ${
-        done ? 'bg-green-700 border-green-700' : 'border-slate-200 bg-white'
-      }`}>
-        {done && <svg width="10" height="10" viewBox="0 0 10 10"><path d="M2 5l2 2 4-4" stroke="white" strokeWidth="1.5" fill="none" strokeLinecap="round"/></svg>}
+      <span className={`w-5 h-5 rounded-full border-2 flex-shrink-0 flex items-center justify-center ${done ? 'bg-green-700 border-green-700' : 'border-slate-200 bg-white'
+        }`}>
+        {done && <svg width="10" height="10" viewBox="0 0 10 10"><path d="M2 5l2 2 4-4" stroke="white" strokeWidth="1.5" fill="none" strokeLinecap="round" /></svg>}
       </span>
       <p className="flex-1 text-sm text-slate-700">{label}</p>
       {time && <span className="text-xs text-slate-400">{time}</span>}
@@ -278,7 +406,7 @@ function CheckInSuccess({ route, nextRoute }: { route: Route; nextRoute: Route |
     <div className="min-h-screen flex flex-col items-center justify-center bg-green-50 px-5 pb-24">
       <div className="carol-card p-8 text-center max-w-sm w-full">
         <div className="flex items-center justify-center w-16 h-16 rounded-full bg-green-700 mx-auto mb-4">
-          <svg width="32" height="32" viewBox="0 0 32 32"><path d="M8 16l5 5 11-11" stroke="white" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          <svg width="32" height="32" viewBox="0 0 32 32"><path d="M8 16l5 5 11-11" stroke="white" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round" /></svg>
         </div>
         <h2 className="text-xl font-bold text-slate-800">Checked Out! 🎄</h2>
         <p className="text-slate-500 text-sm mt-2">Visit at <strong>{route.family?.name}</strong> is complete.</p>

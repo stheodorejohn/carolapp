@@ -44,8 +44,10 @@ create table if not exists public.family_members (
   type        text not null check (type in ('adult', 'child')) default 'adult',
   age         integer check (age >= 0 and age <= 17),
   phone       text,
+  relation    text,
   created_at  timestamptz not null default now()
 );
+alter table public.family_members add column if not exists relation text;
 
 
 -- ─── GROUPS ───────────────────────────────────────────────────────────────────
@@ -73,7 +75,8 @@ create table if not exists public.routes (
   id            uuid primary key default gen_random_uuid(),
   group_id      uuid not null references public.groups(id) on delete cascade,
   family_id     uuid not null references public.families(id) on delete cascade,
-  status        text not null check (status in ('pending', 'in_progress', 'visited')) default 'pending',
+  status        text not null check (status in ('pending', 'arrived', 'in_progress', 'visited')) default 'pending',
+  arrived_at     timestamptz,
   checked_in_at  timestamptz,
   checked_out_at timestamptz,
   order_index   integer not null default 0,

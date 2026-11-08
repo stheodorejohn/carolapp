@@ -18,6 +18,7 @@ interface MemberDraft {
   type: 'adult' | 'child';
   age: string;
   phone: string;
+  relation: string;
 }
 
 interface FamilyDraft {
@@ -25,8 +26,6 @@ interface FamilyDraft {
   address: string;
   phone: string;
   notes: string;
-  spouse: string;
-  children: string;
   mapsLink: string;
   latitude: string;
   longitude: string;
@@ -37,8 +36,6 @@ interface ImportRow {
   address: string;
   phone: string;
   notes: string;
-  spouse: string;
-  children: string;
   status: 'ok' | 'error';
   error?: string;
 }
@@ -82,14 +79,14 @@ function parseGoogleMapsUrl(url: string): { lat: number; lng: number } | null {
   return null;
 }
 
-const TEMPLATE_HEADERS = ['Name *', 'Address *', 'Phone', 'Notes', 'Spouse', 'Children'];
+const TEMPLATE_HEADERS = ['Name *', 'Address *', 'Phone', 'Notes'];
 
 function downloadTemplate() {
   // Build a minimal CSV template for users to fill in
   const rows = [
     TEMPLATE_HEADERS,
-    ['Mary & Joseph', '12, Greenwood Street, Chennai – 600 041', '+91 98765 43210', 'Active in church', 'Mary Mathew', 'Anna (8), Daniel (6)'],
-    ['Abraham Family', '5, Palm Grove, Chennai – 600 034', '+91 98765 55000', '', '', ''],
+    ['Mary & Joseph', '12, Greenwood Street, Chennai – 600 041', '+91 98765 43210', 'Active in church'],
+    ['Abraham Family', '5, Palm Grove, Chennai – 600 034', '+91 98765 55000', ''],
   ];
   const csv = rows.map(r => r.map(c => `"${c}"`).join(',')).join('\n');
   const blob = new Blob([csv], { type: 'text/csv' });
@@ -157,7 +154,7 @@ export default function AddFamilyPage() {
 
 function ManualForm({ onSuccess }: { onSuccess: () => void }) {
   const [form, setForm] = useState<FamilyDraft>({
-    name: '', address: '', phone: '', notes: '', spouse: '', children: '',
+    name: '', address: '', phone: '', notes: '',
     mapsLink: '', latitude: '', longitude: '',
   });
   const [members, setMembers] = useState<MemberDraft[]>([]);
@@ -212,7 +209,7 @@ function ManualForm({ onSuccess }: { onSuccess: () => void }) {
   }
 
   function addMember() {
-    setMembers(m => [...m, { id: uid(), name: '', type: 'adult', age: '', phone: '' }]);
+    setMembers(m => [...m, { id: uid(), name: '', type: 'adult', age: '', phone: '', relation: '' }]);
   }
 
   function updateMember(id: string, k: keyof MemberDraft, v: string) {
@@ -245,8 +242,6 @@ function ManualForm({ onSuccess }: { onSuccess: () => void }) {
           address: form.address.trim(),
           phone: form.phone.trim() || null,
           notes: form.notes.trim() || null,
-          spouse: form.spouse.trim() || null,
-          children: form.children.trim() || null,
           latitude: locationParsed?.lat ?? (form.latitude ? parseFloat(form.latitude) : 0),
           longitude: locationParsed?.lng ?? (form.longitude ? parseFloat(form.longitude) : 0),
         })
@@ -265,6 +260,7 @@ function ManualForm({ onSuccess }: { onSuccess: () => void }) {
             type: m.type,
             age: m.type === 'child' && m.age ? parseInt(m.age) : null,
             phone: m.phone.trim() || null,
+            relation: m.relation.trim() || null,
           }));
 
         if (memberRows.length > 0) {
@@ -351,36 +347,6 @@ function ManualForm({ onSuccess }: { onSuccess: () => void }) {
             onChange={handlePhone}
             className="carol-input !pl-9 py-3 text-sm"
             inputMode="tel"
-          />
-        </Field>
-
-        <Field
-          id="family-spouse"
-          label="Spouse Name"
-          icon={<User size={15} className="text-slate-400" />}
-        >
-          <input
-            id="family-spouse"
-            type="text"
-            placeholder="Optional"
-            value={form.spouse}
-            onChange={set('spouse')}
-            className="carol-input !pl-9 py-3 text-sm"
-          />
-        </Field>
-
-        <Field
-          id="family-children"
-          label="Children"
-          icon={<User size={15} className="text-slate-400" />}
-        >
-          <input
-            id="family-children"
-            type="text"
-            placeholder="e.g. Anna (8), Daniel (6)"
-            value={form.children}
-            onChange={set('children')}
-            className="carol-input !pl-9 py-3 text-sm"
           />
         </Field>
 
@@ -515,6 +481,12 @@ function ManualForm({ onSuccess }: { onSuccess: () => void }) {
               className="carol-input py-2.5 text-sm"
             />
 
+            {/* Relation chips */}
+            <RelationPicker
+              value={m.relation}
+              onChange={v => updateMember(m.id, 'relation', v)}
+            />
+
             <div className="flex items-center gap-2">
               {(['adult', 'child'] as const).map(type => (
                 <label
@@ -578,6 +550,69 @@ function ManualForm({ onSuccess }: { onSuccess: () => void }) {
         {saving ? 'Saving…' : '✅ Save Family'}
       </button>
     </form>
+  );
+}
+
+// ─── Relation picker ──────────────────────────────────────────────────────────
+
+const RELATION_CHIPS = [
+  'Father', 'Mother', 'Son', 'Daughter',
+  'Mother-in-law', 'Father-in-law',
+  'Husband', 'Wife',
+  'Brother', 'Sister',
+  'Grandfather', 'Grandmother',
+];
+
+function RelationPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const normalizedValue = (value || '').trim().toLowerCase();
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <label className="text-xs font-semibold text-slate-500">
+          Relation <span className="font-normal text-slate-400">(select or type)</span>
+        </label>
+        {value && (
+          <button
+            type="button"
+            onClick={() => onChange('')}
+            className="text-[11px] text-slate-400 hover:text-red-500 transition-colors flex items-center gap-0.5"
+          >
+            <X size={11} /> Clear
+          </button>
+        )}
+      </div>
+
+      {/* Common relation chips */}
+      <div className="flex flex-wrap gap-1.5">
+        {RELATION_CHIPS.map(chip => {
+          const isSelected = normalizedValue === chip.toLowerCase();
+          return (
+            <button
+              key={chip}
+              type="button"
+              onClick={() => onChange(isSelected ? '' : chip)}
+              className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-all ${
+                isSelected
+                  ? 'bg-green-100 border-green-500 text-green-800 font-semibold shadow-xs'
+                  : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50'
+              }`}
+            >
+              {chip}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Direct text input for custom relation */}
+      <input
+        type="text"
+        placeholder="e.g. Sam's father, Jerry's father, Uncle…"
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        className="carol-input py-2 text-sm"
+      />
+    </div>
   );
 }
 
@@ -663,12 +698,10 @@ function ImportForm({ onSuccess }: { onSuccess: () => void }) {
         const address = String(row[1] ?? '').trim();
         const phone = String(row[2] ?? '').trim();
         const notes = String(row[3] ?? '').trim();
-        const spouse = String(row[4] ?? '').trim();
-        const children = String(row[5] ?? '').trim();
 
-        if (!name) return { name, address, phone, notes, spouse, children, status: 'error', error: 'Name is required' };
-        if (!address) return { name, address, phone, notes, spouse, children, status: 'error', error: 'Address is required' };
-        return { name, address, phone, notes, spouse, children, status: 'ok' };
+        if (!name) return { name, address, phone, notes, status: 'error', error: 'Name is required' };
+        if (!address) return { name, address, phone, notes, status: 'error', error: 'Address is required' };
+        return { name, address, phone, notes, status: 'ok' };
       }).filter(r => r.name || r.address); // drop completely blank rows
 
       setRows(parsed);
@@ -707,8 +740,6 @@ function ImportForm({ onSuccess }: { onSuccess: () => void }) {
         address: r.address.trim(),
         phone: r.phone?.trim() || null,
         notes: r.notes?.trim() || null,
-        spouse: r.spouse?.trim() || null,
-        children: r.children?.trim() || null,
         latitude: 0,
         longitude: 0,
       }));

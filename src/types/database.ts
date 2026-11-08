@@ -3,7 +3,7 @@
 // ============================================================
 
 export type UserRole = 'admin' | 'leader';
-export type RouteStatus = 'pending' | 'in_progress' | 'visited';
+export type RouteStatus = 'pending' | 'arrived' | 'in_progress' | 'visited';
 
 // --------------- Core Entities ---------------
 
@@ -38,6 +38,7 @@ export interface FamilyMember {
   type: 'adult' | 'child';
   age: number | null;
   phone: string | null;
+  relation?: string | null;
 }
 
 export interface Group {
@@ -59,6 +60,7 @@ export interface Route {
   group_id: string;
   family_id: string;
   status: RouteStatus;
+  arrived_at: string | null;
   checked_in_at: string | null;
   checked_out_at: string | null;
   order_index: number;

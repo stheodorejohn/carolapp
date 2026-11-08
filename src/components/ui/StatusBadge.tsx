@@ -9,6 +9,7 @@ interface StatusBadgeProps {
 const CONFIG = {
   visited:     { label: 'Visited',     cls: 'badge-visited'     },
   pending:     { label: 'Pending',     cls: 'badge-pending'     },
+  arrived:     { label: 'Arrived',     cls: 'badge-in-progress' },
   in_progress: { label: 'In Progress', cls: 'badge-in-progress' },
   live:        { label: 'Live',        cls: 'badge-live',       pulse: true },
 } as const;

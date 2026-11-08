@@ -9,7 +9,7 @@ import { useRouter } from 'next/navigation';
 import {
   ChevronLeft, Phone, MessageSquare, Navigation, User,
   MapPin, StickyNote, CheckCircle2, AlertCircle,
-  Plus, Trash2, Save,
+  Plus, Trash2, Save, X,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import type { Family } from '@/types/database';
@@ -23,6 +23,7 @@ interface MemberDraft {
   type: 'adult' | 'child';
   age: string;
   phone: string;
+  relation: string;
   _deleted?: boolean;
 }
 
@@ -49,8 +50,8 @@ function FamilyEditContent({ params }: Props) {
   const { familyId } = use(params);
 
   const originalRef = useRef<{
-    name: string; address: string; phone: string; spouse: string;
-    children: string; notes: string; latitude: string; longitude: string;
+    name: string; address: string; phone: string;
+    notes: string; latitude: string; longitude: string;
     members: MemberDraft[];
   } | null>(null);
 
@@ -67,8 +68,6 @@ function FamilyEditContent({ params }: Props) {
   const [name, setName] = useState('');
   const [address, setAddress] = useState('');
   const [phone, setPhone] = useState('');
-  const [spouse, setSpouse] = useState('');
-  const [children, setChildren] = useState('');
   const [notes, setNotes] = useState('');
   const [mapsLink, setMapsLink] = useState('');
   const [latitude, setLatitude] = useState('');
@@ -95,14 +94,13 @@ function FamilyEditContent({ params }: Props) {
           type: m.type as 'adult' | 'child',
           age: m.age != null ? String(m.age) : '',
           phone: m.phone ?? '',
+          relation: (m as { relation?: string }).relation ?? '',
         }));
         const lat = f.latitude ? String(f.latitude) : '';
         const lng = f.longitude ? String(f.longitude) : '';
         setName(f.name ?? '');
         setAddress(f.address ?? '');
         setPhone(f.phone ?? '');
-        setSpouse(f.spouse ?? '');
-        setChildren(f.children ?? '');
         setNotes(f.notes ?? '');
         setLatitude(lat);
         setLongitude(lng);
@@ -110,8 +108,7 @@ function FamilyEditContent({ params }: Props) {
         // Store originals for dirty-checking
         originalRef.current = {
           name: f.name ?? '', address: f.address ?? '',
-          phone: f.phone ?? '', spouse: f.spouse ?? '',
-          children: f.children ?? '', notes: f.notes ?? '',
+          phone: f.phone ?? '', notes: f.notes ?? '',
           latitude: lat, longitude: lng,
           members: initMembers.map(m => ({ ...m })),
         };
@@ -172,7 +169,7 @@ function FamilyEditContent({ params }: Props) {
 
   // ── Members ────────────────────────────────────────────────────────────────
   function addMember() {
-    setMembers(m => [...m, { id: uid(), isNew: true, name: '', type: 'adult', age: '', phone: '' }]);
+    setMembers(m => [...m, { id: uid(), isNew: true, name: '', type: 'adult', age: '', phone: '', relation: '' }]);
     markDirty();
   }
   function updateMember(id: string, k: keyof MemberDraft, v: string) {
@@ -200,8 +197,8 @@ function FamilyEditContent({ params }: Props) {
 
       const { error: updateErr } = await supabase.from('families').update({
         name: name.trim(), address: address.trim(),
-        phone: phone.trim() || null, spouse: spouse.trim() || null,
-        children: children.trim() || null, notes: notes.trim() || null,
+        phone: phone.trim() || null,
+        notes: notes.trim() || null,
         latitude: lat, longitude: lng,
       }).eq('id', familyId);
       if (updateErr) throw updateErr;
@@ -215,6 +212,7 @@ function FamilyEditContent({ params }: Props) {
           name: m.name.trim(), type: m.type,
           age: m.type === 'child' && m.age ? parseInt(m.age) : null,
           phone: m.phone.trim() || null,
+          relation: m.relation.trim() || null,
         };
         if (m.isNew) await supabase.from('family_members').insert({ family_id: familyId, ...row });
         else await supabase.from('family_members').update(row).eq('id', m.id);
@@ -347,14 +345,6 @@ function FamilyEditContent({ params }: Props) {
             <input type="tel" placeholder="+91 98765 43210" value={phone} onChange={handlePhone} className="carol-input !pl-9 py-3 text-sm" inputMode="tel" />
           </EF>
 
-          <EF label="Spouse Name" icon={<User size={15} className="text-slate-400" />}>
-            <input type="text" placeholder="Optional" value={spouse} onChange={wrap(setSpouse)} className="carol-input !pl-9 py-3 text-sm" />
-          </EF>
-
-          <EF label="Children" icon={<User size={15} className="text-slate-400" />}>
-            <input type="text" placeholder="e.g. Anna (8), Daniel (6)" value={children} onChange={wrap(setChildren)} className="carol-input !pl-9 py-3 text-sm" />
-          </EF>
-
           <EF label="Notes" multiline icon={<StickyNote size={15} className="text-slate-400" />}>
             <textarea placeholder="Any special notes…" value={notes} onChange={wrap(setNotes)} rows={2} className="carol-input !pl-9 py-3 text-sm resize-none" />
           </EF>
@@ -412,6 +402,11 @@ function FamilyEditContent({ params }: Props) {
                 </button>
               </div>
               <input type="text" placeholder="Full name" value={m.name} onChange={e => updateMember(m.id, 'name', e.target.value)} className="carol-input py-2.5 text-sm" />
+              {/* Relation chips */}
+              <RelationPicker
+                value={m.relation}
+                onChange={v => { updateMember(m.id, 'relation', v); }}
+              />
               <div className="flex items-center gap-2">
                 {(['adult', 'child'] as const).map(type => (
                   <label
@@ -458,6 +453,69 @@ function FamilyEditContent({ params }: Props) {
           {saving ? 'Saving…' : isDirty ? '✅ Save Changes' : '✅ No Changes'}
         </button>
       </form>
+    </div>
+  );
+}
+
+// ─── Relation picker ──────────────────────────────────────────────────────────
+
+const RELATION_CHIPS = [
+  'Father', 'Mother', 'Son', 'Daughter',
+  'Mother-in-law', 'Father-in-law',
+  'Husband', 'Wife',
+  'Brother', 'Sister',
+  'Grandfather', 'Grandmother',
+];
+
+function RelationPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const normalizedValue = (value || '').trim().toLowerCase();
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <label className="text-xs font-semibold text-slate-500">
+          Relation <span className="font-normal text-slate-400">(select or type)</span>
+        </label>
+        {value && (
+          <button
+            type="button"
+            onClick={() => onChange('')}
+            className="text-[11px] text-slate-400 hover:text-red-500 transition-colors flex items-center gap-0.5"
+          >
+            <X size={11} /> Clear
+          </button>
+        )}
+      </div>
+
+      {/* Common relation chips */}
+      <div className="flex flex-wrap gap-1.5">
+        {RELATION_CHIPS.map(chip => {
+          const isSelected = normalizedValue === chip.toLowerCase();
+          return (
+            <button
+              key={chip}
+              type="button"
+              onClick={() => onChange(isSelected ? '' : chip)}
+              className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-all ${
+                isSelected
+                  ? 'bg-green-100 border-green-500 text-green-800 font-semibold shadow-xs'
+                  : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50'
+              }`}
+            >
+              {chip}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Direct text input for custom relation */}
+      <input
+        type="text"
+        placeholder="e.g. Sam's father, Jerry's father, Uncle…"
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        className="carol-input py-2 text-sm"
+      />
     </div>
   );
 }

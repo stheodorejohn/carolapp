@@ -62,8 +62,10 @@ create table if not exists public.family_members (
   name        text not null,
   type        text not null default 'adult' check (type in ('adult', 'child')),
   age         int,
-  phone       text
+  phone       text,
+  relation    text
 );
+alter table public.family_members add column if not exists relation text;
 
 alter table public.family_members enable row level security;
 create policy "Authenticated users can read members"
@@ -99,7 +101,8 @@ create table if not exists public.routes (
   group_id        uuid not null references public.groups(id) on delete cascade,
   family_id       uuid not null references public.families(id) on delete cascade,
   status          text not null default 'pending'
-                  check (status in ('pending', 'in_progress', 'visited')),
+                  check (status in ('pending', 'arrived', 'in_progress', 'visited')),
+  arrived_at      timestamptz,
   checked_in_at   timestamptz,
   checked_out_at  timestamptz,
   order_index     int not null default 0,
