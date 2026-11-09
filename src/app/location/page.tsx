@@ -94,6 +94,8 @@ export default function CurrentLocationPage() {
         <LiveMap
           group={defaultGroup}
           routes={[]}
+          deviceLat={latitude}
+          deviceLng={longitude}
           userLat={displayLat}
           userLng={displayLng}
         />

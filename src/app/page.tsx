@@ -98,7 +98,6 @@ export default function HomePage() {
         <div className="flex items-center gap-2 bg-white/10 rounded-2xl px-4 py-3 mt-4">
           <CalendarDays size={16} className="text-green-200" />
           <span className="text-white text-sm font-medium">Today&apos;s Carol Day — <TodayDate /></span>
-          <ChevronRight size={14} className="text-green-300 ml-auto" />
         </div>
       </div>
 

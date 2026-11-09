@@ -77,7 +77,24 @@ function TrackingContent({ params }: TrackingPageProps) {
 
   useEffect(() => {
     loadData();
-  }, [loadData]);
+
+    const channel = supabase
+      .channel(`tracking-group-${groupId}`)
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'groups', filter: `id=eq.${groupId}` },
+        payload => {
+          if (payload.new) {
+            setGroup(payload.new as Group);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [groupId, loadData]);
 
   const handleLocationUpdate = useCallback(
     async (coords: GeolocationCoordinates) => {
@@ -161,6 +178,8 @@ function TrackingContent({ params }: TrackingPageProps) {
         <LiveMap
           group={currentGroup}
           routes={routes}
+          deviceLat={latitude}
+          deviceLng={longitude}
           userLat={userLat}
           userLng={userLng}
         />
