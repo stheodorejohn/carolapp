@@ -3,6 +3,7 @@
 // ============================================================
 
 export type UserRole = 'admin' | 'leader';
+export type AppRole = 'admin' | 'team_member' | 'driver';
 export type RouteStatus = 'pending' | 'arrived' | 'in_progress' | 'visited';
 
 // --------------- Core Entities ---------------

@@ -66,7 +66,7 @@ export default function SongsPage() {
             placeholder="Search songs…"
             value={search}
             onChange={e => setSearch(e.target.value)}
-            className="carol-input pl-9 py-3 text-sm"
+            className="carol-input !pl-9 py-3 text-sm"
           />
         </div>
       </div>

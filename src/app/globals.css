@@ -176,6 +176,16 @@ html, body {
   box-shadow: 0 0 0 3px rgb(22 101 52 / .12);
 }
 
+/* Modifiers for leading icon / trailing action button clearance */
+.carol-input.has-icon,
+.carol-input-with-icon {
+  padding-left: 44px !important;
+}
+.carol-input.has-action,
+.carol-input-with-action {
+  padding-right: 48px !important;
+}
+
 /* ─── Timeline ───────────────────────────────────────────────────────────────── */
 .timeline-line {
   position: absolute;

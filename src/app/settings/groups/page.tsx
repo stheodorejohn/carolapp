@@ -10,6 +10,8 @@ import {
   Car, Link2, Loader2, Home, GripVertical,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/lib/auth-context';
+import { UserRoleBadge, RoleSwitcherModal } from '@/components/auth/RoleSwitcherModal';
 import type { Family } from '@/types/database';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -809,17 +811,50 @@ function FamiliesTab() {
 // ─── Settings Tab ─────────────────────────────────────────────────────────────
 
 function SettingsTab() {
+  const { user, activeRole, authorizedRoles, signOut } = useAuth();
+  const [roleModalOpen, setRoleModalOpen] = useState(false);
+
+  const displayName = user?.full_name ?? (user?.email ? user.email.split('@')[0] : 'Admin User');
+  const initial = (displayName[0] ?? 'A').toUpperCase();
+  const canSwitchRole = authorizedRoles.length > 1;
+
+  const roleLabels: Record<string, string> = {
+    admin: 'Administrator',
+    team_member: 'Carol Team Member',
+    driver: 'Driver / Sharer',
+  };
+
   return (
     <div className="space-y-4">
       <div className="carol-card p-4">
-        <div className="flex items-center gap-3">
-          <span className="flex items-center justify-center w-12 h-12 rounded-2xl bg-green-700 text-white text-lg font-bold">A</span>
-          <div>
-            <p className="font-semibold text-slate-800">Admin User</p>
-            <p className="text-sm text-slate-400">admin@letscarol.app</p>
+        <div className="flex items-center gap-3.5">
+          <span className="flex items-center justify-center w-12 h-12 rounded-2xl bg-green-700 text-white text-lg font-bold">
+            {initial}
+          </span>
+          <div className="flex-1 min-w-0">
+            <p className="font-bold text-slate-800">{displayName}</p>
+            <p className="text-xs text-slate-400 truncate">{user?.email ?? 'admin@letscarol.app'}</p>
           </div>
-          <span className="ml-auto text-xs bg-green-50 text-green-700 border border-green-200 px-2.5 py-1 rounded-full font-semibold">Admin</span>
+          <span className="text-xs bg-green-50 text-green-700 border border-green-200 px-2.5 py-1 rounded-full font-semibold">
+            {roleLabels[activeRole] ?? activeRole}
+          </span>
         </div>
+
+        {canSwitchRole && (
+          <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between">
+            <div>
+              <p className="text-xs font-semibold text-slate-700">Switch Role</p>
+              <p className="text-[11px] text-slate-400">Available: {authorizedRoles.map(r => roleLabels[r]).join(', ')}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setRoleModalOpen(true)}
+              className="btn-outline py-1.5 px-3 text-xs font-semibold rounded-full border-green-700 text-green-700 hover:bg-green-50"
+            >
+              Switch Role
+            </button>
+          </div>
+        )}
       </div>
 
       <SG title="Preferences">
@@ -833,12 +868,26 @@ function SettingsTab() {
         <SI icon={<Info size={16} className="text-slate-500" />} iconBg="bg-slate-50" label="App Version" sub="v1.0.0 – Let's Carol" chevron={false} />
       </SG>
 
-      <Link href="/login" className="carol-card flex items-center gap-4 p-4 block text-red-500">
+      <button
+        type="button"
+        onClick={() => signOut()}
+        className="carol-card w-full flex items-center gap-4 p-4 text-left text-red-500 hover:bg-red-50/50 transition-colors"
+      >
         <span className="flex items-center justify-center w-10 h-10 rounded-xl bg-red-50">
           <LogOut size={18} className="text-red-500" />
         </span>
-        <span className="font-semibold text-sm">Log Out</span>
-      </Link>
+        <div className="flex-1">
+          <p className="font-semibold text-sm">Log Out</p>
+          <p className="text-xs text-slate-400">Sign out of your account</p>
+        </div>
+      </button>
+
+      {canSwitchRole && (
+        <RoleSwitcherModal
+          isOpen={roleModalOpen}
+          onClose={() => setRoleModalOpen(false)}
+        />
+      )}
     </div>
   );
 }

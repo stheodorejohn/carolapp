@@ -220,6 +220,26 @@ function ManualForm({ onSuccess }: { onSuccess: () => void }) {
     setMembers(m => m.filter(x => x.id !== id));
   }
 
+  const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
+
+  function nextFromBasics() {
+    if (!form.name.trim()) {
+      setErrors({ name: 'Family name is required' });
+      return;
+    }
+    setErrors({});
+    setStep(2);
+  }
+
+  function nextFromLocation() {
+    if (!form.address.trim()) {
+      setErrors({ address: 'Address is required' });
+      return;
+    }
+    setErrors({});
+    setStep(3);
+  }
+
   function validate() {
     const e: Partial<FamilyDraft> = {};
     if (!form.name.trim()) e.name = 'Family name is required';
@@ -230,7 +250,11 @@ function ManualForm({ onSuccess }: { onSuccess: () => void }) {
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    if (!validate()) return;
+    if (!validate()) {
+      if (!form.name.trim()) setStep(1);
+      else if (!form.address.trim()) setStep(2);
+      return;
+    }
     setSaving(true);
 
     try {
@@ -295,261 +319,453 @@ function ManualForm({ onSuccess }: { onSuccess: () => void }) {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      {/* Family Details */}
-      <div className="carol-card p-4 space-y-4">
-        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Family Details</p>
-
-        <Field
-          id="family-name"
-          label="Family Name"
-          required
-          icon={<User size={15} className="text-slate-400" />}
-          error={errors.name}
-        >
-          <input
-            id="family-name"
-            type="text"
-            placeholder="e.g. Abraham Family"
-            value={form.name}
-            onChange={set('name')}
-            className="carol-input !pl-9 py-3 text-sm"
-          />
-        </Field>
-
-        <Field
-          id="family-address"
-          label="Address"
-          required
-          icon={<MapPin size={15} className="text-slate-400" />}
-          error={errors.address}
-        >
-          <textarea
-            id="family-address"
-            placeholder="e.g. 12, Church Road, Chennai – 600 010"
-            value={form.address}
-            onChange={set('address')}
-            rows={2}
-            className="carol-input !pl-9 py-3 text-sm resize-none"
-          />
-        </Field>
-
-        <Field
-          id="family-phone"
-          label="Phone"
-          icon={<Phone size={15} className="text-slate-400" />}
-          warn={phoneWarnMsg(form.phone)}
-        >
-          <input
-            id="family-phone"
-            type="tel"
-            placeholder="+91 98765 43210"
-            value={form.phone}
-            onChange={handlePhone}
-            className="carol-input !pl-9 py-3 text-sm"
-            inputMode="tel"
-          />
-        </Field>
-
-        <Field
-          id="family-notes"
-          label="Notes"
-          icon={<StickyNote size={15} className="text-slate-400" />}
-        >
-          <textarea
-            id="family-notes"
-            placeholder="Any special notes for the carol team…"
-            value={form.notes}
-            onChange={set('notes')}
-            rows={2}
-            className="carol-input !pl-9 py-3 text-sm resize-none"
-          />
-        </Field>
-      </div>
-
-      {/* Location */}
-      <div className="carol-card p-4 space-y-4">
-        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Location</p>
-
-        {/* Google Maps link */}
-        <div>
-          <label htmlFor="maps-link" className="block text-xs font-semibold text-slate-600 mb-1.5">
-            Google Maps Link <span className="text-slate-400 font-normal">(paste to auto-fill coordinates)</span>
-          </label>
-          <div className="relative">
-            <div className="absolute left-3 inset-y-0 flex items-center pointer-events-none">
-              <MapPin size={15} className="text-slate-400" />
-            </div>
-            <input
-              id="maps-link"
-              type="url"
-              placeholder="https://maps.app.goo.gl/... or full Google Maps URL"
-              value={form.mapsLink}
-              onChange={handleMapsLink}
-              className="carol-input !pl-9 py-3 text-sm"
-            />
-          </div>
-          {/* How to get a full link hint */}
-          <p className="text-xs text-slate-400 mt-1">
-            Paste a Google Maps link — full URL or short link (maps.app.goo.gl). Full URLs auto-fill coordinates.
-          </p>
-          {locationError && (
-            <p className="text-xs text-red-500 mt-1 flex items-center gap-1">
-              <AlertCircle size={11} /> {locationError}
-            </p>
-          )}
-          {locationParsed && (
-            <div className="mt-2 flex items-center gap-2 text-xs text-green-700 bg-green-50 rounded-lg px-3 py-2">
-              <MapPin size={12} className="flex-shrink-0" />
-              <span>Coordinates detected: <strong>{locationParsed.lat.toFixed(6)}, {locationParsed.lng.toFixed(6)}</strong></span>
-            </div>
-          )}
-        </div>
-
-        {/* Manual lat/lng override */}
-        <div className="flex gap-3">
-          <div className="flex-1">
-            <label htmlFor="lat" className="block text-xs font-semibold text-slate-600 mb-1.5">Latitude</label>
-            <input
-              id="lat"
-              type="number"
-              step="any"
-              placeholder="e.g. 13.0827"
-              value={form.latitude}
-              onChange={e => {
-                setForm(f => ({ ...f, latitude: e.target.value }));
-                setLocationParsed(null);
+      {/* ── Step Progress Indicator ── */}
+      <div className="flex items-center justify-between mb-5 px-1">
+        {[
+          { num: 1 as const, label: 'Basics' },
+          { num: 2 as const, label: 'Location' },
+          { num: 3 as const, label: 'Members' },
+          { num: 4 as const, label: 'Review' },
+        ].map((s, idx, arr) => (
+          <div key={s.num} className="flex items-center flex-1 last:flex-none">
+            <button
+              type="button"
+              onClick={() => {
+                if (s.num === 1) setStep(1);
+                else if (s.num === 2 && form.name.trim()) setStep(2);
+                else if (s.num === 3 && form.name.trim() && form.address.trim()) setStep(3);
+                else if (s.num === 4 && form.name.trim() && form.address.trim()) setStep(4);
               }}
-              className="carol-input py-3 text-sm"
-            />
-          </div>
-          <div className="flex-1">
-            <label htmlFor="lng" className="block text-xs font-semibold text-slate-600 mb-1.5">Longitude</label>
-            <input
-              id="lng"
-              type="number"
-              step="any"
-              placeholder="e.g. 80.2707"
-              value={form.longitude}
-              onChange={e => {
-                setForm(f => ({ ...f, longitude: e.target.value }));
-                setLocationParsed(null);
-              }}
-              className="carol-input py-3 text-sm"
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* Members */}
-      <div className="carol-card p-4 space-y-3">
-        <div className="flex items-center justify-between">
-          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Members</p>
-          <button
-            type="button"
-            id="add-member-btn"
-            onClick={addMember}
-            className="flex items-center gap-1 text-xs font-semibold text-green-700 hover:text-green-800"
-          >
-            <Plus size={13} /> Add Member
-          </button>
-        </div>
-
-        {members.length === 0 && (
-          <p className="text-sm text-slate-400 text-center py-3">
-            No members yet — tap "Add Member" above
-          </p>
-        )}
-
-        {members.map((m, i) => (
-          <div key={m.id} className="bg-slate-50 rounded-xl p-3 space-y-2">
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-xs font-semibold text-slate-500">Member {i + 1}</span>
-              <button
-                type="button"
-                onClick={() => removeMember(m.id)}
-                className="text-slate-400 hover:text-red-500 transition-colors"
+              className="flex flex-col items-center group"
+            >
+              <span
+                className={`w-7 h-7 rounded-full text-xs font-bold flex items-center justify-center transition-all ${
+                  step === s.num
+                    ? 'bg-green-700 text-white shadow-sm ring-2 ring-green-600 ring-offset-2'
+                    : step > s.num
+                    ? 'bg-green-100 text-green-700'
+                    : 'bg-slate-200 text-slate-500'
+                }`}
               >
-                <Trash2 size={14} />
-              </button>
-            </div>
-
-            <input
-              type="text"
-              placeholder="Full name"
-              value={m.name}
-              onChange={e => updateMember(m.id, 'name', e.target.value)}
-              className="carol-input py-2.5 text-sm"
-            />
-
-            {/* Relation chips */}
-            <RelationPicker
-              value={m.relation}
-              onChange={v => updateMember(m.id, 'relation', v)}
-            />
-
-            <div className="flex items-center gap-2">
-              {(['adult', 'child'] as const).map(type => (
-                <label
-                  key={type}
-                  className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-semibold cursor-pointer transition-colors select-none ${m.type === type
-                      ? 'bg-green-50 border-green-300 text-green-700'
-                      : 'bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100'
-                    }`}
-                >
-                  <input
-                    type="radio"
-                    name={`member-type-${m.id}`}
-                    value={type}
-                    checked={m.type === type}
-                    onChange={() => updateMember(m.id, 'type', type)}
-                    className="sr-only"
-                  />
-                  <span>{type === 'adult' ? '🧑' : '👶'}</span>
-                  <span>{type === 'adult' ? 'Adult' : 'Child'}</span>
-                </label>
-              ))}
-              {m.type === 'child' && (
-                <input
-                  type="number"
-                  placeholder="Age"
-                  value={m.age}
-                  onChange={e => updateMember(m.id, 'age', e.target.value)}
-                  className="carol-input py-2 text-sm w-20"
-                  min={0}
-                  max={17}
-                />
-              )}
-            </div>
-
-            <div>
-              <input
-                type="tel"
-                placeholder="Phone (optional)"
-                value={m.phone}
-                onChange={e => updateMember(m.id, 'phone', e.target.value.replace(/[^0-9+\- ]/g, ''))}
-                className="carol-input py-2.5 text-sm"
-                inputMode="tel"
+                {step > s.num ? '✓' : s.num}
+              </span>
+              <span className={`text-[10px] font-semibold mt-1 transition-colors ${
+                step === s.num ? 'text-green-800' : 'text-slate-400'
+              }`}>
+                {s.label}
+              </span>
+            </button>
+            {idx < arr.length - 1 && (
+              <div
+                className={`flex-1 h-0.5 mx-2 -mt-4 transition-all ${
+                  step > s.num ? 'bg-green-600' : 'bg-slate-200'
+                }`}
               />
-              {phoneWarnMsg(m.phone) && (
-                <p className="text-xs text-orange-500 mt-1 flex items-center gap-1">
-                  <AlertCircle size={11} /> {phoneWarnMsg(m.phone)}
-                </p>
-              )}
-            </div>
+            )}
           </div>
         ))}
       </div>
 
-      {/* Submit */}
-      <button
-        id="save-family-btn"
-        type="submit"
-        disabled={saving}
-        className="btn-primary disabled:opacity-60 disabled:cursor-not-allowed"
-      >
-        {saving ? 'Saving…' : '✅ Save Family'}
-      </button>
+      {/* ── STEP 1: BASICS ── */}
+      {step === 1 && (
+        <div className="space-y-4">
+          <div className="carol-card p-4 space-y-4">
+            <div>
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Step 1 of 4: Family Basics</p>
+              <p className="text-xs text-slate-500 mt-0.5">Enter the family name and primary phone number.</p>
+            </div>
+
+            <Field
+              id="family-name"
+              label="Family Name"
+              required
+              icon={<User size={15} className="text-slate-400" />}
+              error={errors.name}
+            >
+              <input
+                id="family-name"
+                type="text"
+                placeholder="e.g. Abraham Family"
+                value={form.name}
+                onChange={set('name')}
+                className="carol-input !pl-9 py-3 text-sm"
+                autoFocus
+              />
+            </Field>
+
+            <Field
+              id="family-phone"
+              label="Phone Number"
+              icon={<Phone size={15} className="text-slate-400" />}
+              warn={phoneWarnMsg(form.phone)}
+            >
+              <input
+                id="family-phone"
+                type="tel"
+                placeholder="+91 98765 43210 (optional)"
+                value={form.phone}
+                onChange={handlePhone}
+                className="carol-input !pl-9 py-3 text-sm"
+                inputMode="tel"
+              />
+            </Field>
+
+            <Field
+              id="family-notes"
+              label="Special Notes"
+              icon={<StickyNote size={15} className="text-slate-400" />}
+            >
+              <textarea
+                id="family-notes"
+                placeholder="Prayer requests, gate code, or special instructions (optional)…"
+                value={form.notes}
+                onChange={set('notes')}
+                rows={2}
+                className="carol-input !pl-9 py-3 text-sm resize-none"
+              />
+            </Field>
+          </div>
+
+          <button
+            type="button"
+            onClick={nextFromBasics}
+            className="btn-primary py-3.5 text-sm font-bold shadow-md"
+          >
+            Next: Family Location →
+          </button>
+        </div>
+      )}
+
+      {/* ── STEP 2: LOCATION ── */}
+      {step === 2 && (
+        <div className="space-y-4">
+          <div className="carol-card p-4 space-y-4">
+            <div>
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Step 2 of 4: Family Location</p>
+              <p className="text-xs text-slate-500 mt-0.5">Where should the carol team travel?</p>
+            </div>
+
+            <Field
+              id="family-address"
+              label="Street Address"
+              required
+              icon={<MapPin size={15} className="text-slate-400" />}
+              error={errors.address}
+            >
+              <textarea
+                id="family-address"
+                placeholder="e.g. 12, Church Road, Anna Nagar, Chennai – 600 040"
+                value={form.address}
+                onChange={set('address')}
+                rows={2}
+                className="carol-input !pl-9 py-3 text-sm resize-none"
+                autoFocus
+              />
+            </Field>
+
+            {/* Google Maps link */}
+            <div>
+              <label htmlFor="maps-link" className="block text-xs font-semibold text-slate-600 mb-1.5">
+                Google Maps Link <span className="text-slate-400 font-normal">(optional — auto-fills GPS)</span>
+              </label>
+              <div className="relative">
+                <div className="absolute left-3 inset-y-0 flex items-center pointer-events-none">
+                  <MapPin size={15} className="text-slate-400" />
+                </div>
+                <input
+                  id="maps-link"
+                  type="url"
+                  placeholder="Paste Google Maps URL"
+                  value={form.mapsLink}
+                  onChange={handleMapsLink}
+                  className="carol-input !pl-9 py-3 text-sm"
+                />
+              </div>
+              {locationError && (
+                <p className="text-xs text-red-500 mt-1 flex items-center gap-1">
+                  <AlertCircle size={11} /> {locationError}
+                </p>
+              )}
+              {locationParsed && (
+                <div className="mt-2 flex items-center gap-2 text-xs text-green-700 bg-green-50 rounded-lg px-3 py-2">
+                  <MapPin size={12} className="flex-shrink-0" />
+                  <span>GPS detected: <strong>{locationParsed.lat.toFixed(6)}, {locationParsed.lng.toFixed(6)}</strong></span>
+                </div>
+              )}
+            </div>
+
+            {/* Progressive disclosure for raw GPS */}
+            <details className="pt-2 border-t border-slate-100">
+              <summary className="text-xs font-semibold text-slate-500 cursor-pointer hover:text-green-700 select-none py-1">
+                ⚙️ Optional: Manual GPS Coordinates
+              </summary>
+              <div className="flex gap-3 mt-2">
+                <div className="flex-1">
+                  <label htmlFor="lat" className="block text-xs font-semibold text-slate-600 mb-1.5">Latitude</label>
+                  <input
+                    id="lat"
+                    type="number"
+                    step="any"
+                    placeholder="13.0827"
+                    value={form.latitude}
+                    onChange={e => {
+                      setForm(f => ({ ...f, latitude: e.target.value }));
+                      setLocationParsed(null);
+                    }}
+                    className="carol-input py-2 text-xs font-mono"
+                  />
+                </div>
+                <div className="flex-1">
+                  <label htmlFor="lng" className="block text-xs font-semibold text-slate-600 mb-1.5">Longitude</label>
+                  <input
+                    id="lng"
+                    type="number"
+                    step="any"
+                    placeholder="80.2707"
+                    value={form.longitude}
+                    onChange={e => {
+                      setForm(f => ({ ...f, longitude: e.target.value }));
+                      setLocationParsed(null);
+                    }}
+                    className="carol-input py-2 text-xs font-mono"
+                  />
+                </div>
+              </div>
+            </details>
+          </div>
+
+          <div className="flex gap-2.5">
+            <button
+              type="button"
+              onClick={() => setStep(1)}
+              className="py-3 px-5 rounded-full text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors"
+            >
+              ← Back
+            </button>
+            <button
+              type="button"
+              onClick={nextFromLocation}
+              className="btn-primary flex-1 py-3 text-sm font-bold shadow-md"
+            >
+              Next: Family Members →
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── STEP 3: MEMBERS ── */}
+      {step === 3 && (
+        <div className="space-y-4">
+          <div className="carol-card p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Step 3 of 4: Family Members</p>
+                <p className="text-xs text-slate-500 mt-0.5">Add names of family members (optional).</p>
+              </div>
+              <button
+                type="button"
+                id="add-member-btn"
+                onClick={addMember}
+                className="flex items-center gap-1 text-xs font-semibold text-green-700 hover:text-green-800 bg-green-50 px-2.5 py-1.5 rounded-full"
+              >
+                <Plus size={13} /> Add Member
+              </button>
+            </div>
+
+            {members.length === 0 && (
+              <div className="text-center py-6 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                <p className="text-sm text-slate-600 font-medium">No members added yet</p>
+                <p className="text-xs text-slate-400 mt-0.5">You can add members now or skip to review</p>
+                <button
+                  type="button"
+                  onClick={addMember}
+                  className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-green-700 underline"
+                >
+                  + Add first member
+                </button>
+              </div>
+            )}
+
+            {members.map((m, i) => (
+              <div key={m.id} className="bg-slate-50 rounded-xl p-3 space-y-2 border border-slate-100">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs font-semibold text-slate-600">Member {i + 1}</span>
+                  <button
+                    type="button"
+                    onClick={() => removeMember(m.id)}
+                    className="text-slate-400 hover:text-red-500 transition-colors p-1"
+                    aria-label={`Remove member ${i + 1}`}
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+
+                <input
+                  type="text"
+                  placeholder="Full name"
+                  value={m.name}
+                  onChange={e => updateMember(m.id, 'name', e.target.value)}
+                  className="carol-input py-2.5 text-sm"
+                />
+
+                {/* Relation chips */}
+                <RelationPicker
+                  value={m.relation}
+                  onChange={v => updateMember(m.id, 'relation', v)}
+                />
+
+                <div className="flex items-center gap-2">
+                  {(['adult', 'child'] as const).map(type => (
+                    <label
+                      key={type}
+                      className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-semibold cursor-pointer transition-colors select-none ${
+                        m.type === type
+                          ? 'bg-green-50 border-green-300 text-green-700'
+                          : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name={`member-type-${m.id}`}
+                        value={type}
+                        checked={m.type === type}
+                        onChange={() => updateMember(m.id, 'type', type)}
+                        className="sr-only"
+                      />
+                      <span>{type === 'adult' ? '🧑' : '👶'}</span>
+                      <span>{type === 'adult' ? 'Adult' : 'Child'}</span>
+                    </label>
+                  ))}
+                  {m.type === 'child' && (
+                    <input
+                      type="number"
+                      placeholder="Age"
+                      value={m.age}
+                      onChange={e => updateMember(m.id, 'age', e.target.value)}
+                      className="carol-input py-2 text-sm w-20"
+                      min={0}
+                      max={17}
+                    />
+                  )}
+                </div>
+
+                <div>
+                  <input
+                    type="tel"
+                    placeholder="Phone (optional)"
+                    value={m.phone}
+                    onChange={e => updateMember(m.id, 'phone', e.target.value.replace(/[^0-9+\- ]/g, ''))}
+                    className="carol-input py-2 text-sm"
+                    inputMode="tel"
+                  />
+                  {phoneWarnMsg(m.phone) && (
+                    <p className="text-xs text-orange-500 mt-1 flex items-center gap-1">
+                      <AlertCircle size={11} /> {phoneWarnMsg(m.phone)}
+                    </p>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="flex gap-2.5">
+            <button
+              type="button"
+              onClick={() => setStep(2)}
+              className="py-3 px-5 rounded-full text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors"
+            >
+              ← Back
+            </button>
+            <button
+              type="button"
+              onClick={() => setStep(4)}
+              className="btn-primary flex-1 py-3 text-sm font-bold shadow-md"
+            >
+              Next: Review & Save →
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── STEP 4: REVIEW & SAVE ── */}
+      {step === 4 && (
+        <div className="space-y-4">
+          <div className="carol-card p-5 space-y-4">
+            <div className="border-b border-slate-100 pb-3">
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Step 4 of 4: Review Summary</p>
+              <h2 className="text-xl font-bold text-slate-900 mt-1">{form.name}</h2>
+            </div>
+
+            <div className="space-y-3 text-sm">
+              <div>
+                <p className="text-xs text-slate-400 font-medium">Address</p>
+                <p className="text-slate-800 font-medium mt-0.5">{form.address}</p>
+              </div>
+
+              {form.phone && (
+                <div>
+                  <p className="text-xs text-slate-400 font-medium">Phone</p>
+                  <p className="text-slate-800 font-medium mt-0.5">{form.phone}</p>
+                </div>
+              )}
+
+              {form.notes && (
+                <div>
+                  <p className="text-xs text-slate-400 font-medium">Notes</p>
+                  <p className="text-slate-700 mt-0.5 bg-slate-50 p-2.5 rounded-xl text-xs">{form.notes}</p>
+                </div>
+              )}
+
+              <div>
+                <p className="text-xs text-slate-400 font-medium">Location</p>
+                <p className="text-xs text-slate-700 mt-0.5">
+                  {locationParsed
+                    ? `GPS: ${locationParsed.lat.toFixed(5)}, ${locationParsed.lng.toFixed(5)} ✓`
+                    : form.latitude && form.longitude
+                    ? `GPS: ${parseFloat(form.latitude).toFixed(5)}, ${parseFloat(form.longitude).toFixed(5)} ✓`
+                    : 'Address only (no GPS coordinates)'}
+                </p>
+              </div>
+
+              <div>
+                <p className="text-xs text-slate-400 font-medium">Family Members ({members.length})</p>
+                {members.length === 0 ? (
+                  <p className="text-xs text-slate-400 italic mt-0.5">None listed</p>
+                ) : (
+                  <div className="mt-1 flex flex-wrap gap-1.5">
+                    {members.filter(m => m.name.trim()).map(m => (
+                      <span key={m.id} className="text-xs bg-slate-100 text-slate-700 px-2.5 py-1 rounded-full font-medium">
+                        {m.name} {m.relation ? `(${m.relation})` : ''} {m.type === 'child' ? '👶' : ''}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex gap-2.5">
+            <button
+              type="button"
+              onClick={() => setStep(3)}
+              className="py-3 px-5 rounded-full text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors"
+            >
+              ← Back
+            </button>
+            <button
+              id="save-family-btn"
+              type="submit"
+              disabled={saving}
+              className="btn-primary flex-1 py-3.5 text-sm font-bold shadow-md disabled:opacity-60"
+            >
+              {saving ? 'Creating Family…' : '✅ Confirm & Save Family'}
+            </button>
+          </div>
+        </div>
+      )}
     </form>
+  );
+}
   );
 }
 

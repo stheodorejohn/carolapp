@@ -2,28 +2,59 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Home, MapPin, Music, UsersRound } from 'lucide-react';
+import { Home, MapPin, Music, MoreHorizontal, Users, Navigation } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Suspense } from 'react';
+import { useAuth } from '@/lib/auth-context';
+import type { AppRole } from '@/types/database';
 
-const NAV_ITEMS = [
-  { href: '/',                   label: 'Home',    icon: Home        },
-  { href: '/tracking',           label: 'Tracking',icon: MapPin      },
-  { href: '/songs',              label: 'Songs',   icon: Music       },
-  { href: '/settings/groups',    label: 'Manage',  icon: UsersRound  },
-];
+interface NavItem {
+  href: string;
+  label: string;
+  icon: React.ComponentType<{ size?: number; strokeWidth?: number; className?: string }>;
+}
 
-/** Inner component that reads usePathname — must be inside <Suspense> */
+function getNavItemsForRole(role: AppRole): NavItem[] {
+  switch (role) {
+    case 'admin':
+      return [
+        { href: '/',                label: 'Today',    icon: Home          },
+        { href: '/families',        label: 'Families', icon: Users         },
+        { href: '/route',           label: 'Route',    icon: MapPin        },
+        { href: '/admin/dashboard', label: 'More',     icon: MoreHorizontal },
+      ];
+    case 'driver':
+      return [
+        { href: '/',                label: 'Today',    icon: Home          },
+        { href: '/route',           label: 'Route',    icon: MapPin        },
+        { href: '/location',        label: 'Live',     icon: Navigation    },
+        { href: '/admin/dashboard', label: 'More',     icon: MoreHorizontal },
+      ];
+    case 'team_member':
+    default:
+      return [
+        { href: '/',                label: 'Today',    icon: Home          },
+        { href: '/route',           label: 'Route',    icon: MapPin        },
+        { href: '/songs',           label: 'Songs',    icon: Music         },
+        { href: '/admin/dashboard', label: 'More',     icon: MoreHorizontal },
+      ];
+  }
+}
+
+/** Inner component that reads usePathname and active role — must be inside <Suspense> */
 function NavItems() {
   const pathname = usePathname();
+  const { activeRole } = useAuth();
+  const navItems = getNavItemsForRole(activeRole);
+
   return (
     <>
-      {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
+      {navItems.map(({ href, label, icon: Icon }) => {
         const active =
             pathname === href ||
             (href !== '/' && pathname.startsWith(href)) ||
-            // Treat all /settings/* routes as active for the Manage tab
-            (href === '/settings/groups' && pathname.startsWith('/settings'));
+            // Treat /settings/* routes as active for the More tab
+            (href === '/admin/dashboard' && (pathname.startsWith('/settings') || pathname.startsWith('/admin')));
         return (
           <Link
             key={href}
@@ -31,7 +62,7 @@ function NavItems() {
             aria-label={label}
             aria-current={active ? 'page' : undefined}
             className={cn(
-              'flex flex-col items-center gap-1 px-3 py-2 rounded-xl transition-colors min-w-[52px]',
+              'flex flex-col items-center gap-1 px-3 py-2 rounded-xl transition-colors min-w-[56px]',
               active ? 'text-green-700' : 'text-slate-400 hover:text-slate-600'
             )}
           >
@@ -46,7 +77,7 @@ function NavItems() {
               />
             </span>
             <span className={cn(
-              'text-[10px] font-medium',
+              'text-[11px] font-medium leading-tight',
               active ? 'text-green-700' : 'text-slate-400'
             )}>
               {label}
@@ -58,21 +89,22 @@ function NavItems() {
   );
 }
 
-/** Shell rendered during prerender — no active state, correct height */
+/** Shell rendered during prerender — default team member layout */
 function NavShell() {
+  const defaultItems = getNavItemsForRole('team_member');
   return (
     <>
-      {NAV_ITEMS.map(({ href, label, icon: Icon }) => (
+      {defaultItems.map(({ href, label, icon: Icon }) => (
         <Link
           key={href}
           href={href}
           aria-label={label}
-          className="flex flex-col items-center gap-1 px-3 py-2 rounded-xl min-w-[52px] text-slate-400"
+          className="flex flex-col items-center gap-1 px-3 py-2 rounded-xl min-w-[56px] text-slate-400"
         >
           <span className="flex items-center justify-center w-10 h-7 rounded-full">
             <Icon size={20} strokeWidth={1.8} className="text-slate-400" />
           </span>
-          <span className="text-[10px] font-medium">{label}</span>
+          <span className="text-[11px] font-medium leading-tight">{label}</span>
         </Link>
       ))}
     </>

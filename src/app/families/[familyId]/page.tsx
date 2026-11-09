@@ -219,7 +219,7 @@ function FamilyEditContent({ params }: Props) {
       }
 
       setSaved(true);
-      setTimeout(() => router.push('/settings/groups'), 1200);
+      setTimeout(() => router.push('/families'), 1200);
     } catch (err) {
       console.error('[Supabase] Family update failed:', err);
       setSaveError('Failed to save. Please try again.');
@@ -234,10 +234,10 @@ function FamilyEditContent({ params }: Props) {
       <div className="page-container bg-slate-50">
         <div className="bg-white border-b border-slate-100 px-4 pt-14 pb-4">
           <div className="flex items-center gap-3">
-            <Link href="/settings/groups" className="flex items-center justify-center w-8 h-8 rounded-full bg-slate-100">
+            <Link href="/families" className="flex items-center justify-center w-8 h-8 rounded-full bg-slate-100" aria-label="Back to Families">
               <ChevronLeft size={18} className="text-slate-600" />
             </Link>
-            <div className="h-5 w-32 bg-slate-200 rounded animate-pulse" />
+            <div className="h-5 w-32 bg-slate-200 rounded animate-pulse flex-1" />
           </div>
         </div>
         <div className="px-4 pt-4 space-y-3">
@@ -258,7 +258,7 @@ function FamilyEditContent({ params }: Props) {
     return (
       <div className="page-container bg-slate-50 flex flex-col items-center justify-center">
         <p className="text-slate-500 text-sm">{fetchError || 'Family not found'}</p>
-        <Link href="/settings/groups" className="text-green-700 font-semibold text-sm mt-3">← Back</Link>
+        <Link href="/families" className="text-green-700 font-semibold text-sm mt-3">← Back to Families</Link>
       </div>
     );
   }
@@ -284,7 +284,7 @@ function FamilyEditContent({ params }: Props) {
       {/* Sticky header */}
       <div className="bg-white border-b border-slate-100 px-4 pt-14 pb-4 sticky top-0 z-20">
         <div className="flex items-center gap-3">
-          <Link href="/settings/groups" className="flex items-center justify-center w-8 h-8 rounded-full bg-slate-100">
+          <Link href="/families" className="flex items-center justify-center w-8 h-8 rounded-full bg-slate-100" aria-label="Back to Families">
             <ChevronLeft size={18} className="text-slate-600" />
           </Link>
           <h1 className="text-base font-bold text-slate-800 flex-1 truncate">Edit Family</h1>
@@ -370,16 +370,22 @@ function FamilyEditContent({ params }: Props) {
               </div>
             )}
           </div>
-          <div className="flex gap-3">
-            <div className="flex-1">
-              <label className="block text-xs font-semibold text-slate-600 mb-1.5">Latitude</label>
-              <input type="number" step="any" placeholder="13.0827" value={latitude} onChange={e => { setLatitude(e.target.value); setLocationParsed(null); markDirty(); }} className="carol-input py-3 text-sm" />
+          {/* Advanced GPS details — progressively disclosed */}
+          <details className="pt-3 border-t border-slate-100">
+            <summary className="text-xs font-semibold text-slate-500 cursor-pointer hover:text-green-700 select-none py-1">
+              ⚙️ Advanced GPS Coordinates (Latitude / Longitude)
+            </summary>
+            <div className="flex gap-3 mt-3">
+              <div className="flex-1">
+                <label className="block text-xs font-semibold text-slate-600 mb-1.5">Latitude</label>
+                <input type="number" step="any" placeholder="13.0827" value={latitude} onChange={e => { setLatitude(e.target.value); setLocationParsed(null); markDirty(); }} className="carol-input py-2.5 text-xs font-mono" />
+              </div>
+              <div className="flex-1">
+                <label className="block text-xs font-semibold text-slate-600 mb-1.5">Longitude</label>
+                <input type="number" step="any" placeholder="80.2707" value={longitude} onChange={e => { setLongitude(e.target.value); setLocationParsed(null); markDirty(); }} className="carol-input py-2.5 text-xs font-mono" />
+              </div>
             </div>
-            <div className="flex-1">
-              <label className="block text-xs font-semibold text-slate-600 mb-1.5">Longitude</label>
-              <input type="number" step="any" placeholder="80.2707" value={longitude} onChange={e => { setLongitude(e.target.value); setLocationParsed(null); markDirty(); }} className="carol-input py-3 text-sm" />
-            </div>
-          </div>
+          </details>
         </div>
 
         {/* Members */}

@@ -20,12 +20,13 @@ export function RouteCard({ route, index, isLast = false, compact = false }: Rou
       {/* Timeline column */}
       <div className="flex flex-col items-center flex-shrink-0 pt-1">
         <span className={cn(
-          'flex items-center justify-center w-8 h-8 rounded-full text-xs font-bold z-10',
-          status === 'visited'     && 'bg-green-700 text-white',
-          status === 'in_progress' && 'bg-blue-600 text-white',
+          'flex items-center justify-center w-8 h-8 rounded-full text-xs font-bold z-10 transition-colors',
+          status === 'visited'     && 'bg-green-700 text-white shadow-xs',
+          status === 'in_progress' && 'bg-blue-600 text-white ring-2 ring-blue-300 ring-offset-1',
+          status === 'arrived'     && 'bg-amber-600 text-white ring-2 ring-amber-300 ring-offset-1',
           status === 'pending'     && 'bg-slate-200 text-slate-500'
         )}>
-          {index}
+          {status === 'visited' ? '✓' : index}
         </span>
         {!isLast && (
           <div className="w-0.5 flex-1 mt-1 bg-gradient-to-b from-slate-300 to-slate-100 min-h-4" />
@@ -36,24 +37,22 @@ export function RouteCard({ route, index, isLast = false, compact = false }: Rou
       <Link
         href={`/route/${route.id}`}
         className={cn(
-          'carol-card carol-card-hover flex-1 mb-3 p-4 block',
+          'carol-card carol-card-hover flex-1 mb-3 p-4 block transition-all',
           compact && 'p-3',
-          status === 'in_progress' && 'border-blue-200 ring-1 ring-blue-100'
+          status === 'in_progress' && 'border-blue-300 ring-2 ring-blue-100 bg-blue-50/20 shadow-xs',
+          status === 'arrived'     && 'border-amber-300 ring-2 ring-amber-100 bg-amber-50/20 shadow-xs'
         )}
       >
         <div className="flex items-start justify-between gap-2">
           <div className="flex items-start gap-3 flex-1 min-w-0">
             <span className={cn(
               'flex items-center justify-center w-9 h-9 rounded-xl flex-shrink-0 mt-0.5',
-              status === 'visited'     && 'bg-green-50',
-              status === 'in_progress' && 'bg-blue-50',
-              status === 'pending'     && 'bg-slate-50'
+              status === 'visited'     && 'bg-green-50 text-green-700',
+              status === 'in_progress' && 'bg-blue-50 text-blue-600',
+              status === 'arrived'     && 'bg-amber-50 text-amber-600',
+              status === 'pending'     && 'bg-slate-50 text-slate-400'
             )}>
-              <Home size={16} className={cn(
-                status === 'visited'     && 'text-green-700',
-                status === 'in_progress' && 'text-blue-600',
-                status === 'pending'     && 'text-slate-400'
-              )} />
+              <Home size={16} />
             </span>
             <div className="min-w-0">
               <p className="font-semibold text-slate-800 text-sm leading-tight truncate">

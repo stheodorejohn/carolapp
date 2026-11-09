@@ -1,7 +1,9 @@
 import type { Metadata, Viewport } from 'next';
 import type React from 'react';
 import './globals.css';
-import { BottomNav } from '@/components/navigation/BottomNav';
+import { AuthProvider } from '@/lib/auth-context';
+import { AuthGuard } from '@/components/auth/AuthGuard';
+import { NavWrapper } from '@/components/navigation/NavWrapper';
 
 export const metadata: Metadata = {
   title: "Let's Carol – Church Carol Tracking",
@@ -19,8 +21,8 @@ export const viewport: Viewport = {
   themeColor: '#166534',
   width: 'device-width',
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
+  // maximumScale and userScalable intentionally NOT set:
+  // WCAG 1.4.4 — users must be able to resize text up to 200%.
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -41,8 +43,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
       </head>
       <body>
-        <main>{children}</main>
-        <BottomNav />
+        <AuthProvider>
+          <AuthGuard>
+            <main>{children}</main>
+            <NavWrapper />
+          </AuthGuard>
+        </AuthProvider>
       </body>
     </html>
   );

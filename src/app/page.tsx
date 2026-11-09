@@ -4,13 +4,18 @@ import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import {
   CalendarDays, MapPin, Link2, Users, Music,
-  ChevronRight, TreePine, CheckCircle2, Clock3, RefreshCw,
+  ChevronRight, CheckCircle2, Clock3, RefreshCw, LogOut,
+  Navigation, Shield, Car,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/lib/auth-context';
 import { TodayDate } from '@/components/ui/TodayDate';
+import { UserRoleBadge } from '@/components/auth/RoleSwitcherModal';
+import { StatusBadge } from '@/components/ui/StatusBadge';
 import type { DashboardStats, Route } from '@/types/database';
 
 export default function HomePage() {
+  const { user, activeRole, signOut } = useAuth();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [nextStop, setNextStop] = useState<Route | null>(null);
   const [groupId, setGroupId] = useState<string | null>(null);
@@ -73,6 +78,15 @@ export default function HomePage() {
 
   useEffect(() => { load(); }, [load]);
 
+  // Time-aware greeting
+  const hour = new Date().getHours();
+  const timeGreeting =
+    hour < 12 ? 'Good morning' :
+    hour < 17 ? 'Good afternoon' :
+    'Good evening';
+  const displayName = user?.full_name ?? (user?.email ? user.email.split('@')[0] : null);
+  const greeting = displayName ? `${timeGreeting}, ${displayName}!` : `${timeGreeting}!`;
+
   return (
     <div className="page-container bg-slate-50">
       {/* ── Hero ── */}
@@ -82,17 +96,32 @@ export default function HomePage() {
 
         <div className="flex items-center justify-between mb-4">
           <div>
-            <p className="text-green-300 text-sm font-medium">Good morning, Admin</p>
+            <div className="flex items-center gap-2 flex-wrap">
+              <p className="text-green-300 text-sm font-medium">{greeting}</p>
+              <UserRoleBadge />
+            </div>
             <h1 className="text-white text-2xl font-bold mt-1">Let&apos;s Carol 🎄</h1>
             <p className="text-green-200 text-xs mt-1">May the joy of Christmas fill every home.</p>
           </div>
-          <button
-            onClick={load}
-            className="flex items-center justify-center w-12 h-12 rounded-2xl bg-white/10"
-            aria-label="Refresh"
-          >
-            <RefreshCw size={20} className={`text-green-200 ${loading ? 'animate-spin' : ''}`} />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={load}
+              className="flex items-center justify-center w-12 h-12 rounded-2xl bg-white/10"
+              aria-label="Refresh"
+            >
+              <RefreshCw size={20} className={`text-green-200 ${loading ? 'animate-spin' : ''}`} aria-hidden="true" />
+            </button>
+            {user && (
+              <button
+                onClick={() => signOut()}
+                className="flex items-center justify-center w-12 h-12 rounded-2xl bg-white/10"
+                aria-label="Sign out"
+                title="Sign out"
+              >
+                <LogOut size={18} className="text-green-200" aria-hidden="true" />
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="flex items-center gap-2 bg-white/10 rounded-2xl px-4 py-3 mt-4">
@@ -130,62 +159,153 @@ export default function HomePage() {
         </div>
       </div>
 
-      {/* ── Next stop banner ── */}
+      {/* ── Operational Next Stop Card ── */}
       {nextStop?.family && (
         <div className="px-4 mb-5">
-          <div className="carol-card p-4 border-l-4 border-l-green-600">
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Next Stop</p>
-            <div className="flex items-center gap-3">
-              <span className="flex items-center justify-center w-10 h-10 rounded-xl bg-green-50">
-                <MapPin size={18} className="text-green-700" />
+          <div className="carol-card p-5 border-l-4 border-l-green-600 shadow-sm">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[11px] font-bold text-green-700 bg-green-50 px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+                {nextStop.status === 'in_progress' ? 'Visit In Progress' :
+                 nextStop.status === 'arrived' ? 'Arrived at Home' :
+                 'Next Stop'}
               </span>
-              <div className="flex-1 min-w-0">
-                <p className="font-semibold text-slate-800 text-sm">{nextStop.family.name}</p>
-                <p className="text-xs text-slate-400 truncate">{nextStop.family.address}</p>
-              </div>
+              <StatusBadge status={nextStop.status} />
+            </div>
+
+            <div className="my-2">
+              <h2 className="text-xl font-bold text-slate-900 leading-snug">
+                {nextStop.family.name}
+              </h2>
+              <p className="text-sm text-slate-500 mt-1 flex items-start gap-1.5">
+                <MapPin size={16} className="text-slate-400 flex-shrink-0 mt-0.5" />
+                <span>{nextStop.family.address}</span>
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 mt-4 pt-3 border-t border-slate-100">
+              {(nextStop.family.latitude !== 0 || nextStop.family.longitude !== 0) && (
+                <a
+                  href={`https://maps.google.com/?q=${nextStop.family.latitude},${nextStop.family.longitude}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="btn-outline flex-1 py-2.5 text-xs font-semibold gap-1.5 rounded-xl border-slate-200 text-slate-700 hover:bg-slate-50 text-center justify-center inline-flex"
+                  aria-label="Open directions in Google Maps"
+                >
+                  <Navigation size={14} className="text-blue-600" />
+                  Directions
+                </a>
+              )}
               <Link
                 href={`/route/${nextStop.id}`}
-                className="flex-shrink-0 flex items-center justify-center bg-green-700 hover:bg-green-800 active:scale-95 text-white text-sm font-semibold px-5 py-2.5 rounded-full transition-all"
+                className="btn-primary flex-1 py-2.5 text-xs font-bold gap-1 rounded-xl shadow-sm text-center justify-center inline-flex"
               >
-                Go →
+                {nextStop.status === 'in_progress' ? 'Open Active Visit →' :
+                 nextStop.status === 'arrived' ? 'Start Carol Visit →' :
+                 'Open Stop →'}
               </Link>
             </div>
           </div>
         </div>
       )}
 
-      {/* ── Quick Actions ── */}
+      {/* ── Role-Aware Quick Actions ── */}
       <div className="px-4">
         <p className="text-sm font-semibold text-slate-500 mb-3">Quick Actions</p>
         <div className="space-y-3">
-          <QuickAction
-            href={groupId ? `/tracking/${groupId}` : '/tracking'}
-            icon={<MapPin size={20} className="text-green-700" />}
-            iconBg="bg-green-50"
-            title="Live Tracking"
-            sub="View team location and progress"
-          />
-          <QuickAction
-            href="/share"
-            icon={<Link2 size={20} className="text-blue-600" />}
-            iconBg="bg-blue-50"
-            title="Generate / Share Link"
-            sub="Create daily link for congregation"
-          />
-          <QuickAction
-            href="/families"
-            icon={<Users size={20} className="text-purple-600" />}
-            iconBg="bg-purple-50"
-            title="Manage Families"
-            sub="View and update family details"
-          />
-          <QuickAction
-            href="/songs"
-            icon={<Music size={20} className="text-amber-600" />}
-            iconBg="bg-amber-50"
-            title="Carol Songs"
-            sub="Manage songs for the day"
-          />
+          {activeRole === 'driver' ? (
+            <>
+              <QuickAction
+                href="/location"
+                icon={<Navigation size={20} className="text-blue-600" />}
+                iconBg="bg-blue-50"
+                title="Live GPS Location"
+                sub="Share and track vehicle location"
+              />
+              <QuickAction
+                href="/route"
+                icon={<MapPin size={20} className="text-green-700" />}
+                iconBg="bg-green-50"
+                title="Team Route"
+                sub="View all stops and directions"
+              />
+              <QuickAction
+                href="/share"
+                icon={<Link2 size={20} className="text-amber-600" />}
+                iconBg="bg-amber-50"
+                title="Congregation Share Link"
+                sub="Link for families to view live location"
+              />
+              <QuickAction
+                href="/songs"
+                icon={<Music size={20} className="text-purple-600" />}
+                iconBg="bg-purple-50"
+                title="Carol Songs"
+                sub="Lyrics and songs for the team"
+              />
+            </>
+          ) : activeRole === 'admin' ? (
+            <>
+              <QuickAction
+                href="/families"
+                icon={<Users size={20} className="text-purple-600" />}
+                iconBg="bg-purple-50"
+                title="Manage Families"
+                sub="View, add, and organize family stops"
+              />
+              <QuickAction
+                href={groupId ? `/tracking/${groupId}` : '/tracking'}
+                icon={<MapPin size={20} className="text-green-700" />}
+                iconBg="bg-green-50"
+                title="Live Tracking Map"
+                sub="Monitor carol team in real-time"
+              />
+              <QuickAction
+                href="/share"
+                icon={<Link2 size={20} className="text-blue-600" />}
+                iconBg="bg-blue-50"
+                title="Generate / Share Link"
+                sub="Create link for church congregation"
+              />
+              <QuickAction
+                href="/admin/dashboard"
+                icon={<Shield size={20} className="text-emerald-700" />}
+                iconBg="bg-emerald-50"
+                title="Carol Groups & Admin"
+                sub="Manage groups, routes, and settings"
+              />
+            </>
+          ) : (
+            <>
+              <QuickAction
+                href="/route"
+                icon={<MapPin size={20} className="text-green-700" />}
+                iconBg="bg-green-50"
+                title="Today's Route"
+                sub="View stops and mark visits complete"
+              />
+              <QuickAction
+                href="/songs"
+                icon={<Music size={20} className="text-amber-600" />}
+                iconBg="bg-amber-50"
+                title="Carol Songs & Lyrics"
+                sub="Lyrics for caroling visits"
+              />
+              <QuickAction
+                href={groupId ? `/tracking/${groupId}` : '/tracking'}
+                icon={<Navigation size={20} className="text-blue-600" />}
+                iconBg="bg-blue-50"
+                title="Team Live Map"
+                sub="View vehicle position and route"
+              />
+              <QuickAction
+                href="/share"
+                icon={<Link2 size={20} className="text-purple-600" />}
+                iconBg="bg-purple-50"
+                title="Share Tracking Link"
+                sub="Send live tracking to church members"
+              />
+            </>
+          )}
         </div>
       </div>
     </div>

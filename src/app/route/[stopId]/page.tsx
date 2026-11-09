@@ -145,10 +145,10 @@ function RouteStopContent({ params }: Props) {
       {/* Header */}
       <div className="bg-white border-b border-slate-100 px-4 pt-14 pb-4">
         <div className="flex items-center gap-3">
-          <Link href="/route" className="flex items-center justify-center w-8 h-8 rounded-full bg-slate-100">
+          <Link href="/route" className="flex items-center justify-center w-8 h-8 rounded-full bg-slate-100" aria-label="Back to Route">
             <ChevronLeft size={18} className="text-slate-600" />
           </Link>
-          <h1 className="text-base font-bold text-slate-800 flex-1">Check In / Out</h1>
+          <h1 className="text-base font-bold text-slate-800 flex-1">Carol Visit</h1>
           <StatusBadge status={route.status} />
         </div>
       </div>
@@ -312,33 +312,47 @@ function RouteStopContent({ params }: Props) {
 
         {/* Visit Status */}
         <div className="carol-card p-4">
-          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-4">Visit Status</p>
+          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-4">Visit Activity</p>
 
           <div className="flex gap-2 mb-4">
-            {(['Arrived', 'Checked In', 'Checked Out'] as const).map((step) => (
-              <div key={step} className={`flex-1 py-2 rounded-full text-xs font-semibold border text-center transition-colors ${(step === 'Arrived' && arrived) ? 'bg-green-700 text-white border-green-700' :
-                  (step === 'Checked In' && checkedIn) ? 'bg-green-700 text-white border-green-700' :
-                    (step === 'Checked Out' && checkedOut) ? 'bg-green-700 text-white border-green-700' :
-                      'bg-white text-slate-500 border-slate-200'
-                }`}>
-                {step}
-              </div>
-            ))}
+            {(['Arrived', 'In Progress', 'Completed'] as const).map((step) => {
+              const isArrivedActive = step === 'Arrived' && arrived;
+              const isInProgressActive = step === 'In Progress' && checkedIn;
+              const isCompletedActive = step === 'Completed' && checkedOut;
+              const isCurrent = (step === 'Arrived' && arrived && !checkedIn) ||
+                                (step === 'In Progress' && checkedIn && !checkedOut) ||
+                                (step === 'Completed' && checkedOut);
+
+              return (
+                <div
+                  key={step}
+                  className={`flex-1 py-2 rounded-full text-xs font-semibold border text-center transition-colors ${
+                    isCompletedActive || isInProgressActive || isArrivedActive
+                      ? 'bg-green-700 text-white border-green-700'
+                      : 'bg-white text-slate-500 border-slate-200'
+                  } ${isCurrent ? 'ring-2 ring-green-600 ring-offset-1' : ''}`}
+                >
+                  {step}
+                </div>
+              );
+            })}
           </div>
 
           {/* Timeline */}
           <div className="space-y-3 relative">
-            <TimelineEvent label="Arrived" time={formatTime(route.arrived_at)} done={arrived} />
-            <TimelineEvent label="Checked In" time={formatTime(route.checked_in_at)} done={checkedIn} />
-            <TimelineEvent label="Checked Out" time={formatTime(route.checked_out_at)} done={checkedOut} />
+            <TimelineEvent label="Arrived at home" time={formatTime(route.arrived_at)} done={arrived} />
+            <TimelineEvent label="Started carol visit" time={formatTime(route.checked_in_at)} done={checkedIn} />
+            <TimelineEvent label="Completed visit" time={formatTime(route.checked_out_at)} done={checkedOut} />
           </div>
 
           {/* Notes */}
           <div className="mt-4">
-            <p className="text-xs font-semibold text-slate-500 mb-1.5">Notes (Optional)</p>
+            <label htmlFor="visit-notes" className="block text-xs font-semibold text-slate-600 mb-1.5">
+              Visit Notes <span className="text-slate-400 font-normal">(Optional prayer requests, remarks)</span>
+            </label>
             <textarea
               id="visit-notes"
-              className="carol-input resize-none"
+              className="carol-input resize-none text-sm"
               rows={2}
               placeholder="Add visit notes…"
               value={visitNotes}
@@ -346,41 +360,41 @@ function RouteStopContent({ params }: Props) {
               maxLength={300}
               disabled={checkedOut}
             />
-            <p className="text-xs text-slate-300 text-right">{visitNotes.length}/300</p>
+            <p className="text-xs text-slate-400 text-right mt-1">{visitNotes.length}/300</p>
           </div>
         </div>
 
-        {/* Check In / Out button */}
+        {/* State-driven Action Button */}
         {!arrived ? (
           <button
             id="mark-arrived-btn"
             onClick={handleMarkArrived}
             disabled={saving}
-            className="btn-primary disabled:opacity-60"
+            className="btn-primary py-4 text-base font-bold shadow-md disabled:opacity-60"
           >
-            {saving ? 'Saving…' : '📍 Mark as Arrived'}
+            {saving ? 'Updating…' : '📍 I\'m Here — Mark Arrived'}
           </button>
         ) : !checkedIn ? (
           <button
-            id="check-in-btn"
+            id="start-visit-btn"
             onClick={handleCheckIn}
             disabled={saving}
-            className="btn-primary disabled:opacity-60"
+            className="btn-primary py-4 text-base font-bold shadow-md bg-green-700 hover:bg-green-800 disabled:opacity-60"
           >
-            {saving ? 'Saving…' : '✅ Check In'}
+            {saving ? 'Updating…' : '🎵 Start Carol Visit'}
           </button>
         ) : !checkedOut ? (
           <button
-            id="check-out-btn"
+            id="complete-visit-btn"
             onClick={handleCheckOut}
             disabled={saving}
-            className="btn-primary disabled:opacity-60"
+            className="btn-primary py-4 text-base font-bold shadow-md bg-emerald-700 hover:bg-emerald-800 disabled:opacity-60"
           >
-            {saving ? 'Saving…' : '🚪 Check Out & Next'}
+            {saving ? 'Saving…' : '✅ Complete Carol Visit'}
           </button>
         ) : (
-          <div className="carol-card p-4 text-center text-green-700 font-semibold">
-            ✅ Visit Complete
+          <div className="carol-card p-4 text-center text-green-700 font-semibold bg-green-50 border border-green-200">
+            ✓ Visit Completed
           </div>
         )}
       </div>
@@ -408,8 +422,8 @@ function CheckInSuccess({ route, nextRoute }: { route: Route; nextRoute: Route |
         <div className="flex items-center justify-center w-16 h-16 rounded-full bg-green-700 mx-auto mb-4">
           <svg width="32" height="32" viewBox="0 0 32 32"><path d="M8 16l5 5 11-11" stroke="white" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round" /></svg>
         </div>
-        <h2 className="text-xl font-bold text-slate-800">Checked Out! 🎄</h2>
-        <p className="text-slate-500 text-sm mt-2">Visit at <strong>{route.family?.name}</strong> is complete.</p>
+        <h2 className="text-xl font-bold text-slate-800">Carol Visit Complete! 🎄</h2>
+        <p className="text-slate-500 text-sm mt-2">Visit at <strong>{route.family?.name}</strong> is finished.</p>
 
         <div className="carol-card p-4 mt-5 text-left">
           <p className="font-semibold text-slate-800 text-sm">{route.family?.name}</p>
@@ -420,12 +434,12 @@ function CheckInSuccess({ route, nextRoute }: { route: Route; nextRoute: Route |
         </div>
 
         {nextRoute?.family ? (
-          <Link href={`/route/${nextRoute.id}`} className="btn-primary mt-5">
-            View Next Stop →
+          <Link href={`/route/${nextRoute.id}`} className="btn-primary mt-5 py-3.5 text-base font-bold shadow-md">
+            Continue to Next Family →
           </Link>
         ) : (
-          <Link href="/route" className="btn-primary mt-5">
-            ← Back to Route
+          <Link href="/route" className="btn-primary mt-5 py-3.5 text-base font-bold shadow-md">
+            ← Back to Team Route
           </Link>
         )}
       </div>
