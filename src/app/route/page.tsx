@@ -4,6 +4,7 @@ import { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
 import { ChevronLeft, MapPin, Navigation, CheckCircle2, Clock3 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/lib/auth-context';
 import { RouteCard } from '@/components/cards/RouteCard';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import type { Group, Route } from '@/types/database';
@@ -11,6 +12,7 @@ import type { Group, Route } from '@/types/database';
 type RouteFilter = 'all' | 'pending' | 'visited';
 
 export default function TeamRoutePage() {
+  const { currentChurch } = useAuth();
   const [group, setGroup]   = useState<Group | null>(null);
   const [routes, setRoutes] = useState<Route[]>([]);
   const [filter, setFilter] = useState<RouteFilter>('all');
@@ -19,14 +21,20 @@ export default function TeamRoutePage() {
   useEffect(() => {
     async function load() {
       try {
-        // Load the first active group
-        const { data: groupData } = await supabase
+        // Load the first active group for this church
+        let groupQuery = supabase
           .from('groups')
           .select('*')
-          .eq('is_active', true)
+          .eq('is_active', true);
+
+        if (currentChurch?.id) {
+          groupQuery = groupQuery.eq('church_id', currentChurch.id);
+        }
+
+        const { data: groupData } = await groupQuery
           .order('created_at', { ascending: true })
           .limit(1)
-          .single();
+          .maybeSingle();
 
         if (!groupData) return;
         setGroup(groupData as Group);
@@ -46,7 +54,7 @@ export default function TeamRoutePage() {
       }
     }
     load();
-  }, []);
+  }, [currentChurch?.id]);
 
   const visitedCount = useMemo(() => routes.filter(r => r.status === 'visited').length, [routes]);
   const pendingCount = useMemo(() => routes.filter(r => r.status !== 'visited').length, [routes]);

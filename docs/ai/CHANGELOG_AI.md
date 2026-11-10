@@ -4,6 +4,40 @@
 
 ---
 
+## 2026-11-10 — Multi-Church Architecture, Secure Onboarding, Invitation Signup & RLS
+
+- **Multi-Church Database Architecture**:
+  - Created `churches` table (id, name, slug, address, city, phone, created_by).
+  - Created `church_members` table (church_id, user_id, role, status) as the single authoritative source of truth for authorization.
+  - Created `church_invites` table (church_id, token_hash, role, created_by, expires_at, max_uses, use_count, is_active) storing SHA-256 token hashes.
+  - Added `church_id` tenant keys to `families`, `groups`, `songs`, and `routes`.
+  - Added PostgreSQL trigger `trg_validate_route_tenant` to strictly prevent cross-church route linking.
+  - Replaced open `using (true)` policies with strict tenant RLS functions (`is_church_member`, `is_church_admin`, `create_church_with_admin`, `validate_church_invite`, `accept_church_invite`).
+- **Auth & Privilege Escalation Hardening**:
+  - Updated `src/lib/auth-context.tsx`: derives `authorizedRoles` strictly from database `church_members.role`.
+  - Blocked privilege escalation: selecting 'admin' in UI cannot elevate permissions unless authorized in DB.
+  - Exposed `currentChurch`, `churchMembership`, `createChurch()`, and `joinChurchWithInvite()`.
+- **First-Time Admin Setup & Onboarding**:
+  - Created `/church/setup` page with friendly, accessible church name setup for users aged 14–70.
+  - Automatically makes creating user initial church administrator; alternative option to join with code.
+- **Cryptographic Invitation Link System**:
+  - Implemented `/api/invites/generate`: generates 24-byte random token, stores SHA-256 hash in DB, returns link.
+  - Implemented `/api/invites/validate`: validates token hash, checks expiry and max uses, returns church identity without leaking secrets.
+  - Implemented `/api/invites/accept`: joins authenticated user to church, increments usage.
+  - Implemented `/api/invites/deactivate`: permits admins to deactivate links.
+- **Invitation Landing & Signup Integration**:
+  - Created `/join/[token]` landing page displaying prominent church name before signup/join.
+  - Enhanced `/signup` and `/login` to detect `?invite=...`, display church banner, and auto-join.
+- **Church Administration & Member Management**:
+  - Created `/church/settings` for updating church name, viewing members, changing member roles, toggling status, and generating/deactivating invitation links.
+  - Added Church Workspace card to More hub (`/admin/dashboard`) and Church Settings link in `/settings/groups`.
+- **Privacy & Security Hardening**:
+  - Hardened `/live/[groupId]` public tracking to only query non-sensitive group coordinates and stop progress, strictly hiding private notes and phone numbers.
+  - Executed automated security test suite `src/test-security.mjs` verifying privilege escalation prevention, deterministic token hashing, expiration boundaries, and cross-tenant guards.
+  - Verified `pnpm exec tsc --noEmit` and `pnpm run build` succeed with 0 errors across all 32 routes.
+
+---
+
 ## 2026-11-09 — Phase 2 to Phase 9 Implementation
 
 - **Accessibility**: Removed `userScalable: false` and `maximumScale: 1` in `src/app/layout.tsx` (restored pinch-to-zoom WCAG 1.4.4).

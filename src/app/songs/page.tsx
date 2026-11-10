@@ -3,10 +3,12 @@
 import { useEffect, useState } from 'react';
 import { Plus, Search } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/lib/auth-context';
 import { SongCard } from '@/components/cards/SongCard';
 import type { Song } from '@/types/database';
 
 export default function SongsPage() {
+  const { currentChurch } = useAuth();
   const [songs, setSongs] = useState<Song[]>([]);
   const [filtered, setFiltered] = useState<Song[]>([]);
   const [search, setSearch] = useState('');
@@ -16,10 +18,16 @@ export default function SongsPage() {
   useEffect(() => {
     async function load() {
       try {
-        const { data, error: err } = await supabase
+        let query = supabase
           .from('songs')
           .select('*')
           .order('order_index', { ascending: true });
+
+        if (currentChurch?.id) {
+          query = query.eq('church_id', currentChurch.id);
+        }
+
+        const { data, error: err } = await query;
         if (err) throw err;
         setSongs((data ?? []) as Song[]);
       } catch {
@@ -29,7 +37,7 @@ export default function SongsPage() {
       }
     }
     load();
-  }, []);
+  }, [currentChurch?.id]);
 
   useEffect(() => {
     const q = search.toLowerCase();

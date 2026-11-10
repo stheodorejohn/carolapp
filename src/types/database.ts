@@ -4,7 +4,49 @@
 
 export type UserRole = 'admin' | 'leader';
 export type AppRole = 'admin' | 'team_member' | 'driver';
+export type ChurchRole = 'admin' | 'team_member' | 'driver';
 export type RouteStatus = 'pending' | 'arrived' | 'in_progress' | 'visited';
+
+// --------------- Church & Multi-Tenancy ---------------
+
+export interface Church {
+  id: string;
+  name: string;
+  slug?: string | null;
+  address?: string | null;
+  city?: string | null;
+  phone?: string | null;
+  created_by?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ChurchMember {
+  id: string;
+  church_id: string;
+  user_id: string;
+  role: ChurchRole;
+  status: 'active' | 'inactive';
+  created_at: string;
+  updated_at: string;
+  // Optional joined relations
+  church?: Church;
+  profile?: User;
+}
+
+export interface ChurchInvite {
+  id: string;
+  church_id: string;
+  token_hash: string;
+  role: ChurchRole;
+  created_by: string;
+  expires_at?: string | null;
+  max_uses?: number | null;
+  use_count: number;
+  is_active: boolean;
+  created_at: string;
+  church?: Church;
+}
 
 // --------------- Core Entities ---------------
 
@@ -19,6 +61,7 @@ export interface User {
 
 export interface Family {
   id: string;
+  church_id?: string;
   name: string;
   address: string;
   latitude: number;
@@ -30,6 +73,7 @@ export interface Family {
   children: string | null;
   created_at: string;
   updated_at: string;
+  church?: Church;
 }
 
 export interface FamilyMember {
@@ -44,9 +88,11 @@ export interface FamilyMember {
 
 export interface Group {
   id: string;
+  church_id?: string;
   name: string;
   leader_id: string;
   vehicle_number: string | null;
+  slug?: string | null;
   is_active: boolean;
   current_latitude: number | null;
   current_longitude: number | null;
@@ -54,10 +100,12 @@ export interface Group {
   current_direction: string | null;
   last_location_update: string | null;
   created_at: string;
+  church?: Church;
 }
 
 export interface Route {
   id: string;
+  church_id?: string;
   group_id: string;
   family_id: string;
   status: RouteStatus;
@@ -72,10 +120,12 @@ export interface Route {
   // Joined relations
   family?: Family;
   group?: Group;
+  church?: Church;
 }
 
 export interface Song {
   id: string;
+  church_id?: string;
   title: string;
   artist: string | null;
   lyrics: string | null;
@@ -84,6 +134,7 @@ export interface Song {
   order_index: number;
   created_at: string;
   updated_at: string;
+  church?: Church;
 }
 
 // --------------- View / Stats Types ---------------

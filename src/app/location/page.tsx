@@ -22,6 +22,7 @@ import { useGeolocation } from '@/hooks/useGeolocation';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { formatTime } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/lib/auth-context';
 import type { Group } from '@/types/database';
 
 const LiveMap = dynamic(() => import('@/components/map/LiveMap'), {
@@ -30,16 +31,23 @@ const LiveMap = dynamic(() => import('@/components/map/LiveMap'), {
 });
 
 export default function CurrentLocationPage() {
+  const { currentChurch } = useAuth();
   const [group, setGroup] = useState<Group | null>(null);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     async function loadGroup() {
       try {
-        const { data } = await supabase
+        let query = supabase
           .from('groups')
           .select('*')
-          .eq('is_active', true)
+          .eq('is_active', true);
+
+        if (currentChurch?.id) {
+          query = query.eq('church_id', currentChurch.id);
+        }
+
+        const { data } = await query
           .order('created_at', { ascending: true })
           .limit(1)
           .maybeSingle();
@@ -50,7 +58,7 @@ export default function CurrentLocationPage() {
       }
     }
     loadGroup();
-  }, []);
+  }, [currentChurch?.id]);
 
   const { latitude, longitude, speed, heading, error, isTracking, startTracking, stopTracking } =
     useGeolocation({

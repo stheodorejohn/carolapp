@@ -5,15 +5,15 @@
  *
  * Clean, accessible account creation experience.
  * Includes real-time password strength meter and requirements checklist.
- * Uses Supabase Auth to create new users (default role: 'leader').
+ * Supports church invitation signup (?invite=xyz).
  */
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import {
   TreePine, Mail, Eye, EyeOff, AlertCircle, Check, X,
-  CheckCircle2, ArrowRight,
+  CheckCircle2, ArrowRight, Church as ChurchIcon, User,
 } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { cn } from '@/lib/utils';
@@ -62,12 +62,16 @@ function allRequirementsMet(password: string): boolean {
   return PASSWORD_REQUIREMENTS.every(r => r.test(password));
 }
 
-// ─── Component ───────────────────────────────────────────────────────────────
+// ─── Signup Form Component ───────────────────────────────────────────────────
 
-export default function SignupPage() {
+function SignupForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const inviteToken = searchParams.get('invite');
+
   const { signUp, user, loading: authLoading } = useAuth();
 
+  const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -77,7 +81,22 @@ export default function SignupPage() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
   const [needsConfirmation, setNeedsConfirmation] = useState(false);
-  const [fieldErrors, setFieldErrors] = useState({ email: '', password: '', confirm: '' });
+  const [fieldErrors, setFieldErrors] = useState({ fullName: '', email: '', password: '', confirm: '' });
+
+  // Church invitation banner state
+  const [inviteChurchName, setInviteChurchName] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!inviteToken) return;
+    fetch(`/api/invites/validate?token=${encodeURIComponent(inviteToken)}`)
+      .then(res => res.json())
+      .then(data => {
+        if (data?.valid) {
+          setInviteChurchName(data.church_name);
+        }
+      })
+      .catch(() => {});
+  }, [inviteToken]);
 
   const strength = assessPasswordStrength(password);
   const requirementsMet = allRequirementsMet(password);
@@ -92,7 +111,7 @@ export default function SignupPage() {
   }, [user, authLoading, router]);
 
   function validateFields(): boolean {
-    const errors = { email: '', password: '', confirm: '' };
+    const errors = { fullName: '', email: '', password: '', confirm: '' };
     if (!email.trim()) errors.email = 'Please enter your email address.';
     else if (!/\S+@\S+\.\S+/.test(email)) errors.email = 'Please enter a valid email address.';
     if (!password) errors.password = 'Please enter a password.';
@@ -110,11 +129,15 @@ export default function SignupPage() {
 
     setLoading(true);
     try {
-      const { needsConfirmation: nc } = await signUp(email.trim(), password);
+      const { needsConfirmation: nc } = await signUp(
+        email.trim(),
+        password,
+        fullName.trim() || undefined,
+        inviteToken || undefined
+      );
       setSuccess(true);
       setNeedsConfirmation(nc);
       if (!nc) {
-        // Auto signed in — redirect after a brief success message
         setTimeout(() => router.replace('/'), 1500);
       }
     } catch (err: unknown) {
@@ -148,23 +171,24 @@ export default function SignupPage() {
           <CheckCircle2 size={40} className="text-green-600" aria-hidden="true" />
         </div>
         <h2 className="text-2xl font-bold text-slate-800">
-          {needsConfirmation ? 'Check your email!' : 'Welcome to Let\'s Carol! 🎄'}
+          {needsConfirmation ? 'Check your email' : 'Account created!'}
         </h2>
-        {needsConfirmation ? (
-          <p className="text-slate-500 text-sm mt-3 max-w-xs">
-            We sent a confirmation link to <strong>{email}</strong>. Please check your email and click the link to activate your account.
-          </p>
-        ) : (
-          <p className="text-slate-500 text-sm mt-3">
-            Your account has been created. Redirecting you now…
+        {inviteChurchName && (
+          <p className="text-sm font-semibold text-green-700 mt-2">
+            Joined {inviteChurchName}
           </p>
         )}
+        <p className="text-sm text-slate-500 mt-2 max-w-xs">
+          {needsConfirmation
+            ? `We sent a confirmation link to ${email}. Click it to activate your account.`
+            : 'Taking you to your carol dashboard…'}
+        </p>
         {needsConfirmation && (
           <Link
             href="/login"
-            className="mt-6 text-sm font-semibold text-green-700 underline underline-offset-2"
+            className="btn-primary mt-8 inline-flex items-center justify-center py-3 px-6 text-sm font-semibold"
           >
-            Go to Sign In
+            Back to Sign In
           </Link>
         )}
       </div>
@@ -172,25 +196,40 @@ export default function SignupPage() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col" style={{ background: 'linear-gradient(170deg, #f0fdf4 0%, #dcfce7 40%, #f8fafc 100%)' }}>
+    <div
+      className="min-h-screen flex flex-col justify-between"
+      style={{ background: 'linear-gradient(170deg, #f0fdf4 0%, #dcfce7 40%, #f8fafc 100%)' }}
+    >
       {/* ── Hero header ── */}
-      <div className="hero-gradient relative overflow-hidden flex items-center justify-center" style={{ minHeight: 200 }}>
+      <div className="hero-gradient relative overflow-hidden flex items-center justify-center" style={{ minHeight: 210 }}>
         <div className="absolute top-0 right-0 w-56 h-56 bg-white/5 rounded-full -translate-y-1/3 translate-x-1/3" />
         <div className="absolute bottom-0 left-0 w-40 h-40 bg-white/5 rounded-full translate-y-1/3 -translate-x-1/3" />
+
         <div className="text-center px-6 z-10">
           <div className="flex justify-center mb-3">
-            <span className="flex items-center justify-center w-16 h-16 rounded-3xl bg-white/15 backdrop-blur-sm">
-              <TreePine size={32} className="text-white" aria-hidden="true" />
+            <span className="flex items-center justify-center w-14 h-14 rounded-2xl bg-white/15 backdrop-blur-sm">
+              <TreePine size={30} className="text-white" aria-hidden="true" />
             </span>
           </div>
-          <h1 className="text-white text-2xl font-bold">Create Your Account</h1>
-          <p className="text-green-200 text-sm mt-1">Join the carol team</p>
+          <h1 className="text-white text-2xl font-bold leading-tight">Create Account</h1>
+          <p className="text-green-200 text-xs mt-1 font-medium">Join the Carol team</p>
         </div>
       </div>
 
       {/* ── Form card ── */}
       <div className="flex-1 px-5 -mt-6 relative z-10 pb-10">
         <div className="carol-card p-6">
+          {/* Church invitation callout banner */}
+          {inviteChurchName && (
+            <div className="flex items-center gap-3 p-3.5 mb-5 bg-green-50 border border-green-200 rounded-xl text-green-800 text-xs">
+              <ChurchIcon size={18} className="shrink-0 text-green-700" />
+              <div>
+                <p className="font-bold">Joining {inviteChurchName}</p>
+                <p className="text-[11px] text-green-700">You will be automatically added to this church team.</p>
+              </div>
+            </div>
+          )}
+
           {/* Global error */}
           {error && (
             <div role="alert" className="flex items-start gap-3 rounded-xl bg-red-50 border border-red-100 px-4 py-3 mb-5">
@@ -199,15 +238,39 @@ export default function SignupPage() {
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-5" noValidate>
+          <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+            {/* Full Name */}
+            <div>
+              <label htmlFor="signup-name" className="block text-xs font-bold text-slate-700 mb-1.5">
+                Full Name (Optional)
+              </label>
+              <div className="relative">
+                <User
+                  size={16}
+                  className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
+                  aria-hidden="true"
+                />
+                <input
+                  id="signup-name"
+                  type="text"
+                  className="carol-input !pl-11"
+                  placeholder="e.g. John Samuel"
+                  value={fullName}
+                  onChange={e => setFullName(e.target.value)}
+                  autoComplete="name"
+                  disabled={loading}
+                />
+              </div>
+            </div>
+
             {/* Email */}
             <div>
-              <label htmlFor="signup-email" className="block text-sm font-semibold text-slate-700 mb-2">
+              <label htmlFor="signup-email" className="block text-xs font-bold text-slate-700 mb-1.5">
                 Email Address
               </label>
               <div className="relative">
                 <Mail
-                  size={18}
+                  size={16}
                   className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
                   aria-hidden="true"
                 />
@@ -215,7 +278,7 @@ export default function SignupPage() {
                   id="signup-email"
                   type="email"
                   className={`carol-input !pl-11 ${fieldErrors.email ? 'border-red-400' : ''}`}
-                  placeholder="Enter your email address"
+                  placeholder="name@example.com"
                   value={email}
                   onChange={e => {
                     setEmail(e.target.value);
@@ -229,13 +292,13 @@ export default function SignupPage() {
                 />
               </div>
               {fieldErrors.email && (
-                <p id="email-error" role="alert" className="mt-1.5 text-xs text-red-600">{fieldErrors.email}</p>
+                <p id="email-error" role="alert" className="mt-1 text-xs text-red-600">{fieldErrors.email}</p>
               )}
             </div>
 
             {/* Password */}
             <div>
-              <label htmlFor="signup-password" className="block text-sm font-semibold text-slate-700 mb-2">
+              <label htmlFor="signup-password" className="block text-xs font-bold text-slate-700 mb-1.5">
                 Password
               </label>
               <div className="relative">
@@ -251,14 +314,15 @@ export default function SignupPage() {
                   }}
                   autoComplete="new-password"
                   aria-describedby="password-requirements"
+                  aria-invalid={!!fieldErrors.password && !requirementsMet}
                   disabled={loading}
                 />
                 <button
                   type="button"
-                  onClick={() => setShowPassword(v => !v)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center justify-center w-10 h-10 text-slate-400 hover:text-slate-600 rounded-lg transition-colors"
+                  onClick={() => setShowPassword(p => !p)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 p-2 text-slate-400 hover:text-slate-600 transition-colors"
                   aria-label={showPassword ? 'Hide password' : 'Show password'}
-                  aria-pressed={showPassword}
+                  tabIndex={-1}
                 >
                   {showPassword ? <EyeOff size={18} aria-hidden="true" /> : <Eye size={18} aria-hidden="true" />}
                 </button>
@@ -266,21 +330,18 @@ export default function SignupPage() {
 
               {/* Strength meter */}
               {password.length > 0 && (
-                <div className="mt-3" aria-live="polite" aria-atomic="true">
-                  <div className="flex items-center justify-between mb-1.5">
-                    <span className="text-xs text-slate-500">Password strength</span>
-                    <span className={cn('text-xs font-semibold', strength.color)}>
-                      {strength.label}
-                    </span>
+                <div className="mt-2 space-y-1.5" aria-live="polite">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-slate-500 font-medium">Password strength</span>
+                    <span className={cn('font-semibold', strength.color)}>{strength.label}</span>
                   </div>
-                  {/* 5-segment bar */}
-                  <div className="flex gap-1" role="progressbar" aria-valuenow={strength.score} aria-valuemin={0} aria-valuemax={5} aria-label={`Password strength: ${strength.label}`}>
-                    {[1, 2, 3, 4, 5].map(segment => (
+                  <div className="flex gap-1 h-1.5 rounded-full overflow-hidden bg-slate-100">
+                    {[1, 2, 3, 4, 5].map(step => (
                       <div
-                        key={segment}
+                        key={step}
                         className={cn(
-                          'h-1.5 flex-1 rounded-full transition-all duration-300',
-                          segment <= strength.score ? strength.barColor : 'bg-slate-200'
+                          'flex-1 h-full rounded-full transition-all duration-200',
+                          step <= strength.score ? strength.barColor : 'bg-slate-200'
                         )}
                       />
                     ))}
@@ -289,126 +350,132 @@ export default function SignupPage() {
               )}
 
               {/* Requirements checklist */}
-              <div id="password-requirements" className="mt-3 space-y-1.5">
-                <p className="text-xs text-slate-400 font-medium">Your password must include:</p>
+              <div id="password-requirements" className="mt-3 space-y-1 bg-slate-50 rounded-xl p-3 border border-slate-100">
+                <p className="text-[11px] font-semibold text-slate-600 mb-1.5">Password requirements:</p>
                 {PASSWORD_REQUIREMENTS.map(req => {
                   const met = req.test(password);
                   return (
-                    <div key={req.id} className="flex items-center gap-2">
-                      {met ? (
-                        <Check size={13} className="text-green-600 flex-shrink-0" aria-hidden="true" />
-                      ) : (
-                        <X size={13} className="text-slate-300 flex-shrink-0" aria-hidden="true" />
+                    <div
+                      key={req.id}
+                      className={cn(
+                        'flex items-center gap-2 text-xs transition-colors duration-150',
+                        met ? 'text-green-700' : 'text-slate-400'
                       )}
-                      <span className={cn('text-xs', met ? 'text-green-700' : 'text-slate-500')}>
-                        {req.label}
+                    >
+                      <span
+                        className={cn(
+                          'flex items-center justify-center w-4 h-4 rounded-full flex-shrink-0 transition-colors',
+                          met ? 'bg-green-100 text-green-700' : 'bg-slate-200 text-slate-400'
+                        )}
+                        aria-hidden="true"
+                      >
+                        {met ? <Check size={10} strokeWidth={3} /> : <X size={10} strokeWidth={2} />}
                       </span>
+                      <span>{req.label}</span>
                     </div>
                   );
                 })}
               </div>
+
+              {fieldErrors.password && (
+                <p role="alert" className="mt-1 text-xs text-red-600">{fieldErrors.password}</p>
+              )}
             </div>
 
             {/* Confirm Password */}
             <div>
-              <label htmlFor="confirm-password" className="block text-sm font-semibold text-slate-700 mb-2">
+              <label htmlFor="signup-confirm-password" className="block text-xs font-bold text-slate-700 mb-1.5">
                 Confirm Password
               </label>
               <div className="relative">
                 <input
-                  id="confirm-password"
+                  id="signup-confirm-password"
                   type={showConfirm ? 'text' : 'password'}
                   className={cn(
                     'carol-input !pr-14',
-                    passwordsMismatch && 'border-red-400',
-                    passwordsMatch && 'border-green-400'
+                    passwordsMismatch ? 'border-red-400' : '',
+                    passwordsMatch ? 'border-green-400' : ''
                   )}
-                  placeholder="Re-enter your password"
+                  placeholder="Repeat your password"
                   value={confirmPassword}
                   onChange={e => {
                     setConfirmPassword(e.target.value);
                     if (fieldErrors.confirm) setFieldErrors(prev => ({ ...prev, confirm: '' }));
                   }}
                   autoComplete="new-password"
-                  aria-describedby={
-                    passwordsMatch ? 'confirm-match' :
-                    passwordsMismatch ? 'confirm-mismatch' : undefined
-                  }
+                  aria-invalid={passwordsMismatch}
                   disabled={loading}
                 />
                 <button
                   type="button"
-                  onClick={() => setShowConfirm(v => !v)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center justify-center w-10 h-10 text-slate-400 hover:text-slate-600 rounded-lg transition-colors"
+                  onClick={() => setShowConfirm(p => !p)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 p-2 text-slate-400 hover:text-slate-600 transition-colors"
                   aria-label={showConfirm ? 'Hide confirm password' : 'Show confirm password'}
-                  aria-pressed={showConfirm}
+                  tabIndex={-1}
                 >
                   {showConfirm ? <EyeOff size={18} aria-hidden="true" /> : <Eye size={18} aria-hidden="true" />}
                 </button>
               </div>
 
-              {/* Live match feedback */}
-              {confirmPassword.length > 0 && (
-                <p
-                  id={passwordsMatch ? 'confirm-match' : 'confirm-mismatch'}
-                  role="status"
-                  className={cn(
-                    'mt-1.5 text-xs font-medium flex items-center gap-1',
-                    passwordsMatch ? 'text-green-700' : 'text-red-600'
-                  )}
-                >
-                  {passwordsMatch ? (
-                    <><Check size={12} aria-hidden="true" /> Passwords match</>
-                  ) : (
-                    <><X size={12} aria-hidden="true" /> Passwords do not match</>
-                  )}
+              {passwordsMatch && (
+                <p className="mt-1 text-xs text-green-600 flex items-center gap-1 font-medium">
+                  <Check size={12} strokeWidth={3} /> Passwords match
                 </p>
               )}
-              {fieldErrors.confirm && !confirmPassword && (
-                <p role="alert" className="mt-1.5 text-xs text-red-600">{fieldErrors.confirm}</p>
+              {passwordsMismatch && (
+                <p role="alert" className="mt-1 text-xs text-red-600">Passwords do not match</p>
+              )}
+              {fieldErrors.confirm && !passwordsMismatch && (
+                <p role="alert" className="mt-1 text-xs text-red-600">{fieldErrors.confirm}</p>
               )}
             </div>
 
-            {/* Submit */}
+            {/* Submit button */}
             <button
               type="submit"
-              className="btn-primary mt-2 disabled:opacity-60 disabled:cursor-not-allowed"
               disabled={loading}
-              aria-busy={loading}
+              className="btn-primary w-full py-4 text-sm font-bold shadow-md flex items-center justify-center gap-2 mt-2 disabled:opacity-60"
             >
               {loading ? (
-                <>
-                  <svg className="animate-spin h-4 w-4 text-white flex-shrink-0" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-                  </svg>
-                  Creating account…
-                </>
+                <span>Creating account…</span>
               ) : (
                 <>
-                  Create Account <ArrowRight size={16} aria-hidden="true" />
+                  <span>Create Account</span>
+                  <ArrowRight size={18} aria-hidden="true" />
                 </>
               )}
             </button>
           </form>
-        </div>
 
-        {/* ── Sign in link ── */}
-        <div className="mt-6 text-center">
-          <p className="text-sm text-slate-500">Already have an account?</p>
-          <Link
-            href="/login"
-            className="inline-flex items-center gap-1.5 mt-2 text-sm font-semibold text-green-700 hover:text-green-800 underline underline-offset-2"
-          >
-            Sign in instead
-          </Link>
+          {/* Login link */}
+          <div className="mt-6 pt-5 border-t border-slate-100 text-center">
+            <p className="text-xs text-slate-500">
+              Already have an account?{' '}
+              <Link
+                href={inviteToken ? `/login?invite=${encodeURIComponent(inviteToken)}` : '/login'}
+                className="font-bold text-green-700 hover:text-green-800 transition-colors"
+              >
+                Sign In
+              </Link>
+            </p>
+          </div>
         </div>
-
-        <p className="text-center text-xs text-slate-400 mt-8">
-          🎄 Stay connected. Spread the joy.
-        </p>
       </div>
     </div>
   );
 }
 
+export default function SignupPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex flex-col items-center justify-center min-h-screen gap-4 bg-slate-50">
+          <TreePine size={40} className="text-green-600 animate-pulse" />
+          <p className="text-slate-500 text-sm">Loading…</p>
+        </div>
+      }
+    >
+      <SignupForm />
+    </Suspense>
+  );
+}

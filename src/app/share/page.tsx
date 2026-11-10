@@ -14,19 +14,27 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { ChevronLeft, Copy, Check, Share2, Navigation, Users, Shield, QrCode } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/lib/auth-context';
 import type { Group } from '@/types/database';
 
 export default function ShareLocationPage() {
+  const { currentChurch } = useAuth();
   const [group, setGroup] = useState<Group | null>(null);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     async function loadGroup() {
       try {
-        const { data } = await supabase
+        let query = supabase
           .from('groups')
           .select('*')
-          .eq('is_active', true)
+          .eq('is_active', true);
+
+        if (currentChurch?.id) {
+          query = query.eq('church_id', currentChurch.id);
+        }
+
+        const { data } = await query
           .order('created_at', { ascending: true })
           .limit(1)
           .maybeSingle();
@@ -37,7 +45,7 @@ export default function ShareLocationPage() {
       }
     }
     loadGroup();
-  }, []);
+  }, [currentChurch?.id]);
 
   const groupId = group?.slug || group?.id || '';
   const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';

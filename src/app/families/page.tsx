@@ -1,12 +1,15 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import Link from 'next/link';
 import { Plus, Search, RefreshCw } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/lib/auth-context';
 import { FamilyCard } from '@/components/cards/FamilyCard';
 import type { Family } from '@/types/database';
 
 export default function FamiliesPage() {
+  const { currentChurch } = useAuth();
   const [families, setFamilies] = useState<Family[]>([]);
   const [filtered, setFiltered] = useState<Family[]>([]);
   const [search, setSearch] = useState('');
@@ -17,10 +20,16 @@ export default function FamiliesPage() {
     setLoading(true);
     setError('');
     try {
-      const { data, error: err } = await supabase
+      let query = supabase
         .from('families')
         .select('*, members:family_members(*)')
         .order('name', { ascending: true });
+
+      if (currentChurch?.id) {
+        query = query.eq('church_id', currentChurch.id);
+      }
+
+      const { data, error: err } = await query;
 
       if (err) throw err;
       setFamilies((data ?? []) as Family[]);
@@ -29,7 +38,7 @@ export default function FamiliesPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [currentChurch?.id]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -61,12 +70,12 @@ export default function FamiliesPage() {
             >
               <RefreshCw size={14} className={`text-slate-600 ${loading ? 'animate-spin' : ''}`} />
             </button>
-            <a
+            <Link
               href="/families/new"
               className="flex items-center gap-1.5 bg-green-700 text-white text-xs font-semibold px-3 py-2 rounded-full"
             >
               <Plus size={14} /> Add Family
-            </a>
+            </Link>
           </div>
         </div>
         <div className="relative">

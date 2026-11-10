@@ -12,9 +12,52 @@
 
 ## Current Status
 
-**Current phase:** Phase 2 → Phase 8 (Auth, Roles, Navigation, Today, Route, Family, Live Location completed)
+**Current phase:** Phase 12 (Multi-Church Architecture, Tenant RLS, Secure Onboarding & Invitation Signup COMPLETED)
 
 **Last completed task:**  
+- **Phase 12 (Multi-Church Architecture & Tenant Security):**
+  - Database Multi-Tenant Migration (`supabase/migration_multi_church.sql`, `supabase/schema.sql`, `schema.sql`):
+    - `public.churches` (name, slug, created_by, address, city, phone)
+    - `public.church_members` (linking users to churches with authoritative `role` and `status`)
+    - `public.church_invites` (secure invitation tokens with `token_hash`, `role`, `expires_at`, `max_uses`, `use_count`, `is_active`)
+    - `church_id` columns on `families`, `groups`, `songs`, and `routes`
+    - `trg_validate_route_tenant` trigger to reject cross-tenant route corruption
+    - SECURITY DEFINER functions: `is_church_member`, `is_church_admin`, `create_church_with_admin`, `validate_church_invite`, `accept_church_invite`
+    - Removed all open `using (true)` policies, implemented scoped multi-tenant RLS
+  - **Database Types (`src/types/database.ts`):** Added `Church`, `ChurchMember`, `ChurchInvite`, `ChurchRole`, `church_id`
+  - **Auth Context (`src/lib/auth-context.tsx`):**
+    - Database `church_members.role` is the single source of truth for authorization
+    - Derives `authorizedRoles` from database membership; prevents privilege escalation
+    - Manages `currentChurch`, `churchMembership`, `hasChurch`, `createChurch()`, `joinChurchWithInvite()`, `refreshChurch()`
+  - **Guards (`src/components/auth/AuthGuard.tsx` & `NavWrapper.tsx`):**
+    - Permitted public access to `/join/*`
+    - Redirects authenticated users without a church to `/church/setup`
+    - Hides BottomNav on `/church/setup` and `/join/*`
+  - **Admin Church Setup & Onboarding (`src/app/church/setup/page.tsx`):**
+    - Friendly church creation with church name input (14–70 age friendly)
+    - Sets creator as initial Church Administrator; supports joining with code
+  - **Church Settings & Member Management (`src/app/church/settings/page.tsx`):**
+    - Church details, member role management & deactivation, invitation link generation & deactivation
+  - **Cryptographic Invitation API Routes (`src/app/api/invites/*`):**
+    - `POST /api/invites/generate`: Generates 24-byte random token, stores SHA-256 hash in DB, returns link
+    - `GET /api/invites/validate`: Validates token hash, checks expiry and max uses, returns church identity without leaking secrets
+    - `POST /api/invites/accept`: Adds authenticated user to `church_members`, increments use count
+    - `POST /api/invites/deactivate`: Admin deactivates invitation link
+  - **Church Invitation Landing (`src/app/join/[token]/page.tsx`):**
+    - Validates token, prominently displays Church Name before sign up/join
+    - One-click join for signed-in users; guided sign-up/sign-in for new users
+  - **Tenant Query Scoping & UI Updates:**
+    - `src/app/page.tsx`: Displays church name in hero header, scopes overview stats and active group
+    - `src/app/admin/dashboard/page.tsx`: Displays Church Workspace card and quick link to Church Settings & Members
+    - `src/app/settings/groups/page.tsx`: Added Church & Organization settings section
+    - `src/app/families/new/page.tsx` & `src/app/settings/groups/new/page.tsx`: Assigns `church_id`
+    - `src/app/families/page.tsx`, `src/app/songs/page.tsx`, `src/app/route/page.tsx`, `src/app/location/page.tsx`, `src/app/share/page.tsx`: Scoped to active church
+    - `src/app/live/[groupId]/page.tsx`: Hardened public live tracking to strictly query non-sensitive coordinates and progress
+  - **Testing & Validation:**
+    - Security test suite (`src/test-security.mjs`): 100% tests passed
+    - TypeScript compilation (`tsc --noEmit`): 0 errors
+    - Next.js production build (`next build`): Succeeded with zero errors across all 32 routes.
+
 - **Phase 2 (Authentication Foundation):**
   - Viewport accessibility fix (removed `userScalable: false` and `maximumScale: 1` to restore pinch-to-zoom WCAG 1.4.4)
   - Created `src/lib/auth-context.tsx` with Supabase Auth, persistent session management, role tracking, and authorized role switching

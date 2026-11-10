@@ -15,7 +15,7 @@ import { StatusBadge } from '@/components/ui/StatusBadge';
 import type { DashboardStats, Route } from '@/types/database';
 
 export default function HomePage() {
-  const { user, activeRole, signOut } = useAuth();
+  const { user, activeRole, currentChurch, signOut } = useAuth();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [nextStop, setNextStop] = useState<Route | null>(null);
   const [groupId, setGroupId] = useState<string | null>(null);
@@ -25,16 +25,28 @@ export default function HomePage() {
     setLoading(true);
     try {
       // ── Stats: aggregate counts from families & routes ──────────────
+      let famQuery = supabase.from('families').select('*', { count: 'exact', head: true });
+      let rVisited = supabase.from('routes').select('*', { count: 'exact', head: true }).eq('status', 'visited');
+      let rProg = supabase.from('routes').select('*', { count: 'exact', head: true }).eq('status', 'in_progress');
+      let rPend = supabase.from('routes').select('*', { count: 'exact', head: true }).eq('status', 'pending');
+
+      if (currentChurch?.id) {
+        famQuery = famQuery.eq('church_id', currentChurch.id);
+        rVisited = rVisited.eq('church_id', currentChurch.id);
+        rProg = rProg.eq('church_id', currentChurch.id);
+        rPend = rPend.eq('church_id', currentChurch.id);
+      }
+
       const [
         { count: total },
         { count: visited },
         { count: inProgress },
         { count: pending },
       ] = await Promise.all([
-        supabase.from('families').select('*', { count: 'exact', head: true }),
-        supabase.from('routes').select('*', { count: 'exact', head: true }).eq('status', 'visited'),
-        supabase.from('routes').select('*', { count: 'exact', head: true }).eq('status', 'in_progress'),
-        supabase.from('routes').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
+        famQuery,
+        rVisited,
+        rProg,
+        rPend,
       ]);
 
       setStats({
@@ -45,13 +57,19 @@ export default function HomePage() {
       });
 
       // ── Fetch first active group ──────────────────────────────────────
-      const { data: activeGroup } = await supabase
+      let groupQuery = supabase
         .from('groups')
         .select('id')
-        .eq('is_active', true)
+        .eq('is_active', true);
+
+      if (currentChurch?.id) {
+        groupQuery = groupQuery.eq('church_id', currentChurch.id);
+      }
+
+      const { data: activeGroup } = await groupQuery
         .order('created_at', { ascending: true })
         .limit(1)
-        .single();
+        .maybeSingle();
 
       const resolvedGroupId = activeGroup?.id ?? null;
       setGroupId(resolvedGroupId);
@@ -65,7 +83,7 @@ export default function HomePage() {
           .neq('status', 'visited')
           .order('order_index', { ascending: true })
           .limit(1)
-          .single();
+          .maybeSingle();
 
         setNextStop(nextRouteData as Route ?? null);
       }
@@ -74,7 +92,7 @@ export default function HomePage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [currentChurch?.id]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -100,7 +118,14 @@ export default function HomePage() {
               <p className="text-green-300 text-sm font-medium">{greeting}</p>
               <UserRoleBadge />
             </div>
-            <h1 className="text-white text-2xl font-bold mt-1">Let&apos;s Carol 🎄</h1>
+            {currentChurch?.name ? (
+              <div className="mt-1">
+                <p className="text-green-300 text-[11px] font-bold tracking-wider uppercase">{currentChurch.name}</p>
+                <h1 className="text-white text-2xl font-bold">Carol Visits 🎄</h1>
+              </div>
+            ) : (
+              <h1 className="text-white text-2xl font-bold mt-1">Let&apos;s Carol 🎄</h1>
+            )}
             <p className="text-green-200 text-xs mt-1">May the joy of Christmas fill every home.</p>
           </div>
           <div className="flex items-center gap-2">

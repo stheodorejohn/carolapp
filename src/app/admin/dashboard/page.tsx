@@ -15,7 +15,7 @@ import Link from 'next/link';
 import {
   Users, UsersRound, MapPin, Music, Link2, Shield,
   Navigation, LogOut, ChevronRight, Info, CheckCircle2,
-  CalendarDays, RefreshCw, Car, User
+  CalendarDays, RefreshCw, Car, User, Church as ChurchIcon
 } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { supabase } from '@/lib/supabase';
@@ -23,7 +23,7 @@ import { RoleSwitcherModal } from '@/components/auth/RoleSwitcherModal';
 import type { DashboardStats, Group } from '@/types/database';
 
 export default function MorePage() {
-  const { user, activeRole, authorizedRoles, signOut } = useAuth();
+  const { user, activeRole, authorizedRoles, currentChurch, signOut } = useAuth();
   const [roleModalOpen, setRoleModalOpen] = useState(false);
   const [activeGroup, setActiveGroup] = useState<Group | null>(null);
   const [stats, setStats] = useState<DashboardStats | null>(null);
@@ -117,6 +117,27 @@ export default function MorePage() {
           )}
         </div>
 
+        {/* ── Church Identity Card ── */}
+        <div className="carol-card p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <span className="flex items-center justify-center w-10 h-10 rounded-xl bg-green-100 text-green-700">
+                <ChurchIcon size={20} />
+              </span>
+              <div>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Church Workspace</p>
+                <p className="text-sm font-bold text-slate-800">{currentChurch?.name ?? 'Carol Church'}</p>
+              </div>
+            </div>
+            <Link
+              href="/church/settings"
+              className="text-xs font-semibold text-green-700 hover:text-green-800 bg-green-50 hover:bg-green-100 transition-colors px-3 py-1.5 rounded-lg border border-green-200"
+            >
+              Settings &amp; Members
+            </Link>
+          </div>
+        </div>
+
         {/* ── Active Group Status (if available) ── */}
         {activeGroup && (
           <div className="carol-card p-4">
@@ -146,6 +167,13 @@ export default function MorePage() {
               Administration
             </p>
             <div className="carol-card divide-y divide-slate-100">
+              <MenuRow
+                href="/church/settings"
+                icon={<ChurchIcon size={18} className="text-emerald-700" />}
+                iconBg="bg-emerald-50"
+                title="Church Members & Invitations"
+                subtitle="Manage members, change roles, and create invite links"
+              />
               <MenuRow
                 href="/settings/groups"
                 icon={<UsersRound size={18} className="text-purple-600" />}

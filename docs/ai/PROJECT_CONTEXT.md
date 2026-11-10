@@ -118,45 +118,41 @@ src/components/
 
 ---
 
-## Authentication Architecture
+## Multi-Church Architecture & Security
 
-### Current State (INCOMPLETE — Requires Implementation)
+### Multi-Tenancy Foundation
+The application uses a secure **Multi-Church Tenant Model**:
+- **Organization (Tenant)**: `public.churches` (`id`, `name`, `slug`, `created_by`, `created_at`).
+- **User Identity**: Supabase `auth.users` synced to `public.profiles`.
+- **Church Membership**: `public.church_members` (`church_id`, `user_id`, `role`, `status`).
+- **Invitations**: `public.church_invites` (`church_id`, `token_hash`, `role`, `expires_at`, `max_uses`, `use_count`, `is_active`).
+- **Tenant-Scoped Entities**: `families.church_id`, `groups.church_id`, `songs.church_id`, `routes.church_id`.
+- **Tenant Integrity**: PostgreSQL trigger `trg_validate_route_tenant` ensures route's group and family belong to the identical church.
 
-- **Login page** exists at `/login/page.tsx` but is a **stub** — simulates auth with a fake 1200ms delay, no real Supabase Auth call
-- **No session management** — no auth context, no token storage
-- **No protected routes** — all routes accessible without login
-- **No role enforcement** — all pages show same content regardless of user
-- **Supabase Auth** is available via `@supabase/supabase-js` but not wired up
+### Row Level Security (RLS)
+Open policies (`using (true)`) are completely removed. Access is strictly scoped:
+- `is_church_member(church_id)`: Verifies user has active membership.
+- `is_church_admin(church_id)`: Verifies user is an active admin.
+- Sensitive mutations (groups, songs, routes, church settings) restricted to verified church admins.
 
-### Database: No `auth.users` Integration
-- The `users` table type in `src/types/database.ts` has `email`, `role`, `full_name`, `avatar_url`
-- The DB schema (`supabase/schema.sql`) does **not** create a users table — relies on Supabase Auth
-- RLS policies currently allow **all access** (open policies): `for all using (true)` — no auth enforcement
-
-### Supabase Auth Integration Points
-- `src/lib/supabase.ts` exports `supabase` (anon client) and `createServerClient()` (service role)
-- Auth calls would use `supabase.auth.signInWithPassword()`, `supabase.auth.signUp()`, etc.
+### Role Model
+- Authoritative database source of truth: `church_members.role` (`admin | team_member | driver`).
+- Client UI roles: `activeRole` switches only within verified `authorizedRoles`. Selecting `admin` in UI cannot grant unauthorized administrative privileges.
 
 ---
 
-## User / Role Model
+## Authentication Architecture
 
-### Types Defined
-```typescript
-type UserRole = 'admin' | 'leader';
-```
+### Production Implementation
+- **Supabase Auth**: Real email + password authentication with persistent sessions.
+- **Route Protection**: `src/components/auth/AuthGuard.tsx` protects private routes, redirects unauthenticated users to `/login`, and directs users without a church to `/church/setup`.
+- **Onboarding & Invitations**:
+  - Initial admin onboarding at `/church/setup`.
+  - Secure invitation links `/join/[token]` validate token hashes via `/api/invites/validate` without exposing internal secrets.
+  - New and existing users join via `/api/invites/accept`.
+- **Password Security**: Real-time 5-criterion checklist and strength meter (8+ chars, upper, lower, number, special).
+- **Forgot & Reset Password**: Complete flow at `/forgot-password` and `/reset-password`.
 
-### Current Reality
-- Only two roles defined in TypeScript: `admin` and `leader`
-- Groups have a `leader_id` field (UUID, nullable) — references auth users
-- No actual role-based routing or UI differentiation exists yet
-
-### Required Role Expansion
-Per product requirements:
-- `admin` — Full management access
-- `leader` / `team_member` — Route access, visit management
-- `driver` — Navigation + location sharing
-- Public users — Read-only live tracking at `/live/[groupId]`
 
 ---
 

@@ -6,18 +6,20 @@
  * Clean, accessible sign-in experience using Supabase Auth.
  * Designed for users aged 14–70. No jargon, clear feedback,
  * keyboard-navigable, adequate touch targets.
+ * Supports joining a church via invitation link (?invite=xyz).
  */
 
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { TreePine, Mail, Eye, EyeOff, AlertCircle, ArrowRight } from 'lucide-react';
+import { TreePine, Mail, Eye, EyeOff, AlertCircle, ArrowRight, Church as ChurchIcon } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { signIn, user, loading: authLoading } = useAuth();
+  const inviteToken = searchParams.get('invite');
+  const { signIn, user, loading: authLoading, joinChurchWithInvite } = useAuth();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -26,13 +28,34 @@ function LoginForm() {
   const [error, setError] = useState('');
   const [fieldErrors, setFieldErrors] = useState({ email: '', password: '' });
 
+  // Church invitation banner state
+  const [inviteChurchName, setInviteChurchName] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!inviteToken) return;
+    fetch(`/api/invites/validate?token=${encodeURIComponent(inviteToken)}`)
+      .then(res => res.json())
+      .then(data => {
+        if (data?.valid) {
+          setInviteChurchName(data.church_name);
+        }
+      })
+      .catch(() => {});
+  }, [inviteToken]);
+
   // If already authenticated, redirect to home or return URL
   useEffect(() => {
     if (!authLoading && user) {
-      const returnTo = searchParams.get('redirect') ?? '/';
-      router.replace(returnTo);
+      if (inviteToken) {
+        joinChurchWithInvite(inviteToken).then(() => {
+          router.replace('/');
+        });
+      } else {
+        const returnTo = searchParams.get('redirect') ?? '/';
+        router.replace(returnTo);
+      }
     }
-  }, [user, authLoading, router, searchParams]);
+  }, [user, authLoading, router, searchParams, inviteToken, joinChurchWithInvite]);
 
   function validateFields(): boolean {
     const errors = { email: '', password: '' };
@@ -50,10 +73,13 @@ function LoginForm() {
     setLoading(true);
     try {
       await signIn(email.trim(), password);
+      if (inviteToken) {
+        await joinChurchWithInvite(inviteToken);
+        router.replace('/');
+      }
       // Auth state change will trigger the useEffect redirect above
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : '';
-      // Map Supabase error messages to user-friendly text
       if (
         msg.includes('Invalid login credentials') ||
         msg.includes('invalid_credentials') ||
@@ -70,7 +96,6 @@ function LoginForm() {
     }
   }
 
-  // Show full-screen loading while checking existing session
   if (authLoading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen gap-4 bg-slate-50">
@@ -81,10 +106,12 @@ function LoginForm() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col" style={{ background: 'linear-gradient(170deg, #f0fdf4 0%, #dcfce7 40%, #f8fafc 100%)' }}>
+    <div
+      className="min-h-screen flex flex-col justify-between"
+      style={{ background: 'linear-gradient(170deg, #f0fdf4 0%, #dcfce7 40%, #f8fafc 100%)' }}
+    >
       {/* ── Hero header ── */}
       <div className="hero-gradient relative overflow-hidden flex items-center justify-center" style={{ minHeight: 240 }}>
-        {/* Decorative circles */}
         <div className="absolute top-0 right-0 w-56 h-56 bg-white/5 rounded-full -translate-y-1/3 translate-x-1/3" />
         <div className="absolute bottom-0 left-0 w-40 h-40 bg-white/5 rounded-full translate-y-1/3 -translate-x-1/3" />
 
@@ -98,16 +125,27 @@ function LoginForm() {
             Let&apos;s Carol
           </h1>
           <p className="text-green-200 text-sm mt-2 font-medium">
-            Spread the joy. Share the love.
+            Carol Route &amp; Visit Tracker
           </p>
         </div>
       </div>
 
       {/* ── Form card ── */}
-      <div className="flex-1 px-5 -mt-6 relative z-10 pb-10">
+      <div className="flex-1 px-5 -mt-8 relative z-10 pb-10">
         <div className="carol-card p-6">
           <h2 className="text-xl font-bold text-slate-800 mb-1">Welcome back</h2>
           <p className="text-slate-500 text-sm mb-6">Sign in to your carol team account</p>
+
+          {/* Church invitation callout banner */}
+          {inviteChurchName && (
+            <div className="flex items-center gap-3 p-3.5 mb-5 bg-green-50 border border-green-200 rounded-xl text-green-800 text-xs">
+              <ChurchIcon size={18} className="shrink-0 text-green-700" />
+              <div>
+                <p className="font-bold">Joining {inviteChurchName}</p>
+                <p className="text-[11px] text-green-700">Sign in to confirm joining this church team.</p>
+              </div>
+            </div>
+          )}
 
           {/* Global error */}
           {error && (
@@ -121,7 +159,7 @@ function LoginForm() {
           )}
 
           <form onSubmit={handleSubmit} className="space-y-5" noValidate>
-            {/* Email / Username */}
+            {/* Email */}
             <div>
               <label htmlFor="email" className="block text-sm font-semibold text-slate-700 mb-2">
                 Email Address
@@ -159,12 +197,12 @@ function LoginForm() {
             {/* Password */}
             <div>
               <div className="flex items-center justify-between mb-2">
-                <label htmlFor="password" className="text-sm font-semibold text-slate-700">
+                <label htmlFor="password" className="block text-sm font-semibold text-slate-700">
                   Password
                 </label>
                 <Link
                   href="/forgot-password"
-                  className="text-xs font-semibold text-green-700 hover:text-green-800 underline underline-offset-2"
+                  className="text-xs text-green-700 font-semibold hover:text-green-800 transition-colors"
                 >
                   Forgot password?
                 </Link>
@@ -185,18 +223,18 @@ function LoginForm() {
                   aria-invalid={!!fieldErrors.password}
                   disabled={loading}
                 />
-                {/* Show/hide password toggle */}
                 <button
                   type="button"
-                  onClick={() => setShowPassword(v => !v)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center justify-center w-10 h-10 text-slate-400 hover:text-slate-600 rounded-lg transition-colors"
+                  onClick={() => setShowPassword(p => !p)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 p-2 text-slate-400 hover:text-slate-600 transition-colors"
                   aria-label={showPassword ? 'Hide password' : 'Show password'}
-                  aria-pressed={showPassword}
+                  tabIndex={-1}
                 >
-                  {showPassword
-                    ? <EyeOff size={18} aria-hidden="true" />
-                    : <Eye size={18} aria-hidden="true" />
-                  }
+                  {showPassword ? (
+                    <EyeOff size={18} aria-hidden="true" />
+                  ) : (
+                    <Eye size={18} aria-hidden="true" />
+                  )}
                 </button>
               </div>
               {fieldErrors.password && (
@@ -206,49 +244,36 @@ function LoginForm() {
               )}
             </div>
 
-            {/* Submit */}
+            {/* Submit button */}
             <button
               type="submit"
-              className="btn-primary mt-2 disabled:opacity-60 disabled:cursor-not-allowed"
               disabled={loading}
-              aria-busy={loading}
+              className="btn-primary w-full py-4 text-sm font-bold shadow-md flex items-center justify-center gap-2 mt-2 disabled:opacity-60"
             >
               {loading ? (
-                <>
-                  <svg
-                    className="animate-spin h-4 w-4 text-white flex-shrink-0"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    aria-hidden="true"
-                  >
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-                  </svg>
-                  Signing in…
-                </>
+                <span>Signing in…</span>
               ) : (
                 <>
-                  Sign In <ArrowRight size={16} aria-hidden="true" />
+                  <span>Sign In</span>
+                  <ArrowRight size={18} aria-hidden="true" />
                 </>
               )}
             </button>
           </form>
-        </div>
 
-        {/* ── Create account link ── */}
-        <div className="mt-6 text-center">
-          <p className="text-sm text-slate-500">New to the Carol application?</p>
-          <Link
-            href="/signup"
-            className="inline-flex items-center gap-1.5 mt-2 text-sm font-semibold text-green-700 hover:text-green-800 underline underline-offset-2"
-          >
-            Create a new account
-          </Link>
+          {/* Registration link */}
+          <div className="mt-6 pt-5 border-t border-slate-100 text-center">
+            <p className="text-xs text-slate-500">
+              Don&apos;t have an account?{' '}
+              <Link
+                href={inviteToken ? `/signup?invite=${encodeURIComponent(inviteToken)}` : '/signup'}
+                className="font-bold text-green-700 hover:text-green-800 transition-colors"
+              >
+                Sign Up
+              </Link>
+            </p>
+          </div>
         </div>
-
-        <p className="text-center text-xs text-slate-400 mt-8">
-          🎄 Stay connected. Spread the joy.
-        </p>
       </div>
     </div>
   );

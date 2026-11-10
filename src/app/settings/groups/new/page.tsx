@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ChevronLeft, Users, Car, CheckCircle2, AlertCircle } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/lib/auth-context';
 
 interface GroupDraft {
   name: string;
@@ -13,6 +14,7 @@ interface GroupDraft {
 
 export default function NewGroupPage() {
   const router = useRouter();
+  const { currentChurch, user } = useAuth();
   const [form, setForm] = useState<GroupDraft>({ name: '', vehicle_number: '' });
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -29,10 +31,11 @@ export default function NewGroupPage() {
 
     try {
       const { error: err } = await supabase.from('groups').insert({
+        church_id:      currentChurch?.id,
         name:           form.name.trim(),
         vehicle_number: form.vehicle_number.trim() || null,
         is_active:      true,
-        // leader_id is nullable — no auth yet
+        leader_id:      user?.id ?? null,
       });
 
       if (err) throw err;

@@ -28,13 +28,16 @@ All routes use the App Router (`src/app/` directory).
 
 | Route | File | Description | Auth Required |
 |-------|------|-------------|---------------|
-| `/` | `app/page.tsx` | Home / Today screen | Authenticated |
-| `/login` | `app/login/page.tsx` | Login page with Supabase Auth | Public |
-| `/signup` | `app/signup/page.tsx` | Registration page with strength meter | Public |
+| `/` | `app/page.tsx` | Home / Today screen (scoped to active church) | Authenticated |
+| `/login` | `app/login/page.tsx` | Login page with Supabase Auth & invite banner | Public |
+| `/signup` | `app/signup/page.tsx` | Registration with strength meter & church join | Public |
+| `/join/[token]` | `app/join/[token]/page.tsx` | Secure church invitation landing & join screen | Public / Auth |
+| `/church/setup` | `app/church/setup/page.tsx` | Church onboarding & initial admin setup | Authenticated |
+| `/church/settings` | `app/church/settings/page.tsx` | Church info, member management & invite links | Authenticated (Admin) |
 | `/forgot-password` | `app/forgot-password/page.tsx` | Password reset request | Public |
 | `/reset-password` | `app/reset-password/page.tsx` | Set new password from recovery link | Public / Recovery |
 | `/admin/dashboard` | `app/admin/dashboard/page.tsx` | Central "More" hub & role switcher | Authenticated |
-| `/families` | `app/families/page.tsx` | Family list & search | Authenticated |
+| `/families` | `app/families/page.tsx` | Family list & search (scoped to church) | Authenticated |
 | `/families/new` | `app/families/new/page.tsx` | Add family (4-step wizard) | Authenticated |
 | `/families/[familyId]` | `app/families/[familyId]/page.tsx` | Family detail & member management | Authenticated |
 | `/route` | `app/route/page.tsx` | Route list & active stop callout | Authenticated |
@@ -42,12 +45,16 @@ All routes use the App Router (`src/app/` directory).
 | `/tracking` | `app/tracking/page.tsx` | Redirect to active group tracking | Authenticated |
 | `/tracking/[groupId]` | `app/tracking/[groupId]/page.tsx` | Live tracking map | Authenticated |
 | `/location` | `app/location/page.tsx` | GPS sharing & broadcast (driver view) | Authenticated |
-| `/live/[groupId]` | `app/live/[groupId]/page.tsx` | Public congregation view | Public |
+| `/live/[groupId]` | `app/live/[groupId]/page.tsx` | Public congregation view (privacy hardened) | Public |
 | `/share` | `app/share/page.tsx` | Congregation share link & QR | Authenticated |
-| `/songs` | `app/songs/page.tsx` | Carol songbook & lyrics | Authenticated |
+| `/songs` | `app/songs/page.tsx` | Carol songbook & lyrics (scoped to church) | Authenticated |
 | `/songs/[songId]` | `app/songs/[songId]/page.tsx` | Song detail & YouTube | Authenticated |
 | `/settings/groups` | `app/settings/groups/page.tsx` | Group management | Admin |
 | `/settings/groups/new` | `app/settings/groups/new/page.tsx` | Create group | Admin |
+| `/api/invites/validate` | `app/api/invites/validate/route.ts` | Validates invite token without exposing secrets | Public |
+| `/api/invites/accept` | `app/api/invites/accept/route.ts` | Accepts invite & creates church membership | Authenticated |
+| `/api/invites/generate` | `app/api/invites/generate/route.ts` | Generates random token & stores token hash | Admin |
+| `/api/invites/deactivate` | `app/api/invites/deactivate/route.ts` | Deactivates invite link | Admin |
 
 ### Planned Routes (Not Yet Created)
 | Route | Purpose |
@@ -322,3 +329,36 @@ status = 'visited'
 When `supabase.auth.signUp()` runs, `on_auth_user_created` fires in PostgreSQL and automatically creates or updates the user's corresponding entry in `public.profiles`.
 
 
+
+
+---
+
+## Multi-Church Architecture & Security Model
+
+```
+Church (public.churches)
+    ├── Church Members (public.church_members) [role: admin | team_member | driver]
+    ├── Church Invites (public.church_invites) [token_hash, role, expiry, max_uses]
+    ├── Families (public.families.church_id)
+    │     └── Family Members (public.family_members.family_id)
+    ├── Carol Groups (public.groups.church_id)
+    ├── Routes (public.routes.church_id) [group_id, family_id]
+    └── Songs (public.songs.church_id)
+```
+
+### Tenant Isolation & Row Level Security (RLS)
+
+1. **Database-Controlled Membership Roles**:
+   `church_members.role` is the single source of truth for authorization. User-controlled JWT metadata or frontend state cannot grant elevated privileges.
+2. **PostgreSQL Helper Functions**:
+   - `is_church_member(church_id uuid)`: Verifies caller (`auth.uid()`) has an active membership.
+   - `is_church_admin(church_id uuid)`: Verifies caller has an active `admin` membership.
+   - `validate_route_tenant()` Trigger: Prevents cross-church corruption by ensuring `routes.church_id = groups.church_id = families.church_id`.
+3. **Secure Invitation Architecture**:
+   - Generates cryptographically secure 24-byte random tokens.
+   - Stores only SHA-256 `token_hash` in `church_invites`.
+   - Never exposes internal database UUIDs or secrets on the join screen.
+   - Idempotently creates/activates `church_members` records with safe non-admin default roles (`team_member`).
+4. **Public Live Tracking Boundaries**:
+   - `/live/[groupId]` allows unauthenticated congregation access to active group GPS coordinates and progress.
+   - Sensitive family phone numbers, notes, and other church records are strictly excluded from anon queries.

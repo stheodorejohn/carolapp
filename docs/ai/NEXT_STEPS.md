@@ -23,6 +23,11 @@
 - [x] **P13 — Family Details Progressive Disclosure**: Fixed back buttons to `/families` and tucked raw GPS coordinates behind an expandable details block.
 - [x] **P14 — Add Family Wizard**: 4-step wizard (`1. Basics` → `2. Location` → `3. Members` → `4. Review & Save`).
 - [x] **P15 — Live Location Consolidation**: Persistent ON/OFF indicator, Stop Tracking control, congregation share preview, removed non-functional duration selector in `/share`.
+- [x] **P16 — Multi-Church Architecture & Tenant RLS**: Created `churches`, `church_members`, `church_invites`, added `church_id` across tables with route consistency trigger `trg_validate_route_tenant`. Replaced open RLS with strict `is_church_member` and `is_church_admin` policies.
+- [x] **P17 — Church Onboarding & Identity**: Implemented `/church/setup` for initial admin onboarding and church name creation. Displayed prominent church identity across Home, More, and public links.
+- [x] **P18 — Cryptographic Invitation System**: Built `/api/invites/generate`, `/api/invites/validate`, `/api/invites/accept`, `/api/invites/deactivate` storing SHA-256 token hashes, enforcing expiration and usage limits.
+- [x] **P19 — Invitation Join & Signup Flow**: Created `/join/[token]` landing page displaying church name before signup, with auto-join support on `/signup?invite=...` and `/login?invite=...`.
+- [x] **P20 — Church Administration & Member Management**: Created `/church/settings` for updating church name, changing member roles, toggling member status, and managing invitation links.
 
 ---
 
@@ -33,12 +38,7 @@
 **Goal:** Enhance service worker in `public/manifest.json` so caroling teams can view song lyrics and today's route offline when entering areas with low mobile reception.  
 **Files:** `public/manifest.json`, `src/app/songs/page.tsx`.
 
-### Task 2 — Supabase Row Level Security (RLS) Hardening
-**Priority:** Medium (Production readiness)  
-**Goal:** Replace open RLS policies (`for all using (true)`) in `supabase/schema.sql` with authenticated `auth.uid()` checks and admin role checks once moving from demo mode to multi-church production.  
-**Files:** `supabase/schema.sql`.
-
-### Task 3 — Congregation Arrival Notification
+### Task 2 — Congregation Arrival Notification
 **Priority:** Low  
 **Goal:** Allow families viewing the public `/live/[groupId]` page to request an optional browser push notification or audio chime when the carol group arrives at their home.  
 **Files:** `src/app/live/[groupId]/page.tsx`.

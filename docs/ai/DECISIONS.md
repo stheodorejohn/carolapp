@@ -360,3 +360,105 @@ Ensures confirmation emails and auth links automatically redirect to the exact e
 
 
 
+---
+
+## D-016 — Multi-Church Tenant Model via Church Memberships
+
+**Date:** 2026-11-10
+
+**Decision:**  
+The application uses **Church** as the core multi-tenant security boundary. Separated user identity (`auth.users` / `profiles`) from tenant membership (`church_members` linked to `churches`). Every business entity (`families`, `groups`, `songs`, `routes`) contains a direct foreign key `church_id uuid references public.churches(id) on delete cascade`.
+
+**Reason:**  
+Enforces strict database-level data isolation via Supabase RLS. Prevents cross-church data leakage where users of Church A could access Church B data. Allows future flexibility for users belonging to multiple churches while maintaining clear tenant isolation.
+
+**Affected areas:**
+- `supabase/schema.sql`, `supabase/migration_multi_church.sql`
+- `src/types/database.ts`
+- `src/lib/auth-context.tsx`
+- All data-fetching pages (`families`, `routes`, `songs`, `groups`)
+
+**Status:** Implemented
+
+---
+
+## D-017 — Authoritative Database-Controlled Roles vs UI Experience
+
+**Date:** 2026-11-10
+
+**Decision:**  
+Moved the source of truth for authorization from client-controlled `user_metadata.role` to `church_members.role`. Role hierarchy:
+- If `church_members.role = 'admin'`: authorized for `['admin', 'team_member', 'driver']`
+- If `church_members.role = 'driver'`: authorized for `['driver', 'team_member']`
+- If `church_members.role = 'team_member'`: authorized for `['team_member', 'driver']`
+UI role switching (`activeRole`) only toggles within the user's `authorizedRoles`. Selecting `admin` in the UI cannot grant admin permissions unless the database membership record genuinely authorizes administration. All sensitive actions are protected by PostgreSQL RLS functions (`is_church_admin`, `is_church_member`).
+
+**Reason:**  
+Completely prevents privilege escalation through localStorage tampering, client state manipulation, or forged requests.
+
+**Affected areas:**
+- `src/lib/auth-context.tsx`
+- `src/components/auth/RoleSwitcherModal.tsx`
+- PostgreSQL helper functions & RLS policies
+
+**Status:** Implemented
+
+---
+
+## D-018 — Cryptographic Invitation Tokens with Token Hashing
+
+**Date:** 2026-11-10
+
+**Decision:**  
+Church invitation links (`/join/<token>`) use 24-byte cryptographically secure random tokens. Raw secret tokens are NEVER stored in the database; only their deterministic SHA-256 hash (`token_hash`) is stored in `church_invites`. Validation and acceptance endpoints compute the SHA-256 hash server-side.
+
+**Reason:**  
+Prevents token exposure or database leaks from compromising active invitation links. Protects church integrity and guarantees that only persons possessing the raw invite link can join.
+
+**Affected areas:**
+- `church_invites` table
+- `src/app/api/invites/generate/route.ts`
+- `src/app/api/invites/validate/route.ts`
+- `src/app/api/invites/accept/route.ts`
+- `src/app/api/invites/deactivate/route.ts`
+
+**Status:** Implemented
+
+---
+
+## D-019 — Church Name Prominence in Onboarding & Invitations
+
+**Date:** 2026-11-10
+
+**Decision:**  
+When an invited user opens `/join/<token>`, the church name is fetched and displayed prominently before registration:
+"Welcome to [Church Name]. You have been invited to join the [Church Name] Carol team."
+Additionally, signing up or logging in with `?invite=<token>` preserves the church context and displays an informational confirmation banner.
+
+**Reason:**  
+Target audience (ages 14–70) needs immediate reassurance that they are joining the correct congregation. Hides technical parameters (UUIDs, tokens, database IDs) in favor of clear human church identity.
+
+**Affected areas:**
+- `src/app/join/[token]/page.tsx`
+- `src/app/signup/page.tsx`
+- `src/app/login/page.tsx`
+
+**Status:** Implemented
+
+---
+
+## D-020 — Public Live Tracking Privacy Hardening
+
+**Date:** 2026-11-10
+
+**Decision:**  
+The public congregation live tracking route `/live/[groupId]` was hardened to only query non-sensitive group location and progress fields (`id, name, vehicle_number, current_latitude, current_longitude, current_speed, current_direction, is_active, last_location_update`) and minimal stop progress (`id, status, eta, order_index, family(name, address)`). Private notes, phone numbers, family member details, and other church records are strictly excluded from public queries.
+
+**Reason:**  
+Protects congregation families' private contact details from public exposure while still providing real-time caroling progress.
+
+**Affected areas:**
+- `src/app/live/[groupId]/page.tsx`
+- `supabase/schema.sql` (RLS policies for anon users)
+
+**Status:** Implemented

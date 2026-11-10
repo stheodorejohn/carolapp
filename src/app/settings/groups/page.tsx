@@ -857,6 +857,19 @@ function SettingsTab() {
         )}
       </div>
 
+      <SG title="Church & Organization">
+        <Link href="/church/settings" className="w-full flex items-center gap-3 p-4 text-left hover:bg-slate-50 transition-colors">
+          <span className="flex items-center justify-center w-9 h-9 rounded-xl bg-green-50 text-green-700">
+            <Shield size={16} />
+          </span>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-slate-700">Church Members &amp; Invitations</p>
+            <p className="text-xs text-slate-400">Manage church members, roles, and invitation links</p>
+          </div>
+          <span className="text-slate-300">›</span>
+        </Link>
+      </SG>
+
       <SG title="Preferences">
         <SI icon={<Bell size={16} className="text-blue-600" />} iconBg="bg-blue-50" label="Notifications" sub="Push notification settings" />
         <SI icon={<Wifi size={16} className="text-green-600" />} iconBg="bg-green-50" label="Location Sharing" sub="Auto-share duration and interval" />

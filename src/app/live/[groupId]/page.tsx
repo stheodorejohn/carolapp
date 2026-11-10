@@ -27,14 +27,15 @@ function LiveTrackingContent({ params }: LiveTrackingPageProps) {
     try {
       let groupRes = await supabase
         .from('groups')
-        .select('*')
-        .eq('id', groupId)
+        .select('id, name, vehicle_number, current_latitude, current_longitude, current_speed, current_direction, is_active, last_location_update')
+        .or(`id.eq.${groupId},slug.eq.${groupId}`)
+        .eq('is_active', true)
         .maybeSingle();
 
       if (!groupRes.data) {
         groupRes = await supabase
           .from('groups')
-          .select('*')
+          .select('id, name, vehicle_number, current_latitude, current_longitude, current_speed, current_direction, is_active, last_location_update')
           .eq('is_active', true)
           .order('created_at', { ascending: true })
           .limit(1)
@@ -48,14 +49,15 @@ function LiveTrackingContent({ params }: LiveTrackingPageProps) {
 
       const activeId = groupRes.data?.id ?? groupId;
 
+      // Privacy hardening: Only select public fields (name, area), never private phone numbers or notes
       const { data: routeData } = await supabase
         .from('routes')
-        .select('*, family:families(*)')
+        .select('id, group_id, status, eta, order_index, family:families(id, name, address)')
         .eq('group_id', activeId)
         .order('order_index', { ascending: true });
 
       if (routeData) {
-        setRoutes(routeData as Route[]);
+        setRoutes((routeData as unknown) as Route[]);
       }
     } catch (err) {
       console.error('[LiveTrackingPage] load error:', err);

@@ -4,9 +4,10 @@
  * AuthGuard Component
  *
  * Protects application routes on the client side:
- * - Allows public routes: /login, /signup, /forgot-password, /reset-password, /live/*
+ * - Allows public routes: /login, /signup, /forgot-password, /reset-password, /live/*, /join/*
  * - Redirects unauthenticated users to /login?redirect=<path>
- * - Redirects authenticated users away from /login, /signup, /forgot-password to /
+ * - Redirects authenticated users without a church to /church/setup
+ * - Redirects authenticated users with a church away from /login, /signup, /forgot-password to /
  * - Wrapped in <Suspense> so usePathname() does not block Next.js route prerendering
  */
 
@@ -15,7 +16,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { TreePine } from 'lucide-react';
 
-const PUBLIC_PREFIXES = ['/login', '/signup', '/forgot-password', '/reset-password', '/live'];
+const PUBLIC_PREFIXES = ['/login', '/signup', '/forgot-password', '/reset-password', '/live', '/join'];
 
 function isPublicRoute(pathname: string | null): boolean {
   if (!pathname) return false;
@@ -23,7 +24,7 @@ function isPublicRoute(pathname: string | null): boolean {
 }
 
 function AuthGuardInner({ children }: { children: ReactNode }) {
-  const { user, loading } = useAuth();
+  const { user, loading, hasChurch } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
 
@@ -41,10 +42,26 @@ function AuthGuardInner({ children }: { children: ReactNode }) {
 
     // Authenticated user attempting to visit login/signup/forgot-password
     if (user && (pathname === '/login' || pathname === '/signup' || pathname === '/forgot-password')) {
+      if (!hasChurch) {
+        router.replace('/church/setup');
+      } else {
+        router.replace('/');
+      }
+      return;
+    }
+
+    // Authenticated user with NO church attempting to access internal pages (other than onboarding or join)
+    if (user && !hasChurch && !isPublic && pathname !== '/church/setup') {
+      router.replace('/church/setup');
+      return;
+    }
+
+    // Authenticated user WITH church attempting to access church setup page
+    if (user && hasChurch && pathname === '/church/setup') {
       router.replace('/');
       return;
     }
-  }, [user, loading, pathname, router]);
+  }, [user, loading, hasChurch, pathname, router]);
 
   const isPublic = isPublicRoute(pathname);
   const showSpinner = loading && !isPublic;
@@ -88,5 +105,3 @@ export function AuthGuard({ children }: { children: ReactNode }) {
     </Suspense>
   );
 }
-
-

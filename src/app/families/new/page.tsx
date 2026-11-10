@@ -9,6 +9,7 @@ import {
   Plus, Trash2, X, Download,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/lib/auth-context';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -153,6 +154,7 @@ export default function AddFamilyPage() {
 // ─── Manual Form ──────────────────────────────────────────────────────────────
 
 function ManualForm({ onSuccess }: { onSuccess: () => void }) {
+  const { currentChurch } = useAuth();
   const [form, setForm] = useState<FamilyDraft>({
     name: '', address: '', phone: '', notes: '',
     mapsLink: '', latitude: '', longitude: '',
@@ -262,6 +264,7 @@ function ManualForm({ onSuccess }: { onSuccess: () => void }) {
       const { data: familyRow, error: familyErr } = await supabase
         .from('families')
         .insert({
+          church_id: currentChurch?.id,
           name: form.name.trim(),
           address: form.address.trim(),
           phone: form.phone.trim() || null,
@@ -766,8 +769,6 @@ function ManualForm({ onSuccess }: { onSuccess: () => void }) {
     </form>
   );
 }
-  );
-}
 
 // ─── Relation picker ──────────────────────────────────────────────────────────
 
@@ -875,6 +876,7 @@ function Field({
 // ─── Import Form ──────────────────────────────────────────────────────────────
 
 function ImportForm({ onSuccess }: { onSuccess: () => void }) {
+  const { currentChurch } = useAuth();
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
   const [rows, setRows] = useState<ImportRow[]>([]);
@@ -952,6 +954,7 @@ function ImportForm({ onSuccess }: { onSuccess: () => void }) {
 
     try {
       const rows_to_insert = validRows.map(r => ({
+        church_id: currentChurch?.id,
         name: r.name.trim(),
         address: r.address.trim(),
         phone: r.phone?.trim() || null,
