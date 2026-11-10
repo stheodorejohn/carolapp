@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
+import { useRouter, usePathname } from 'next/navigation';
 import { Plus, Search, RefreshCw } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth-context';
@@ -10,11 +11,20 @@ import type { Family } from '@/types/database';
 
 export default function FamiliesPage() {
   const { currentChurch } = useAuth();
+  const router = useRouter();
+  const pathname = usePathname();
   const [families, setFamilies] = useState<Family[]>([]);
   const [filtered, setFiltered] = useState<Family[]>([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+
+  // Canonical slug route redirection
+  useEffect(() => {
+    if (pathname === '/families' && currentChurch?.slug) {
+      router.replace(`/${currentChurch.slug}/families`);
+    }
+  }, [pathname, currentChurch?.slug, router]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -71,7 +81,7 @@ export default function FamiliesPage() {
               <RefreshCw size={14} className={`text-slate-600 ${loading ? 'animate-spin' : ''}`} />
             </button>
             <Link
-              href="/families/new"
+              href={currentChurch?.slug ? `/${currentChurch.slug}/families/new` : '/families/new'}
               className="flex items-center gap-1.5 bg-green-700 text-white text-xs font-semibold px-3 py-2 rounded-full"
             >
               <Plus size={14} /> Add Family
@@ -136,7 +146,7 @@ export default function FamiliesPage() {
         ) : (
           <div className="space-y-3">
             {filtered.map(family => (
-              <FamilyCard key={family.id} family={family} />
+              <FamilyCard key={family.id} family={family} churchSlug={currentChurch?.slug} />
             ))}
           </div>
         )}

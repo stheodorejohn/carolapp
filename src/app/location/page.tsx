@@ -14,6 +14,7 @@
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
+import { useRouter, usePathname } from 'next/navigation';
 import {
   ChevronLeft, Gauge, Compass, Clock, Navigation,
   Share2, Copy, Check, Shield, AlertCircle, StopCircle
@@ -31,9 +32,20 @@ const LiveMap = dynamic(() => import('@/components/map/LiveMap'), {
 });
 
 export default function CurrentLocationPage() {
-  const { currentChurch } = useAuth();
+  const { currentChurch, authorizedRoles, activeRole, switchRole } = useAuth();
+  const router = useRouter();
+  const pathname = usePathname();
   const [group, setGroup] = useState<Group | null>(null);
   const [copied, setCopied] = useState(false);
+
+  const isAuthorizedToBroadcast = authorizedRoles.includes('driver') || authorizedRoles.includes('admin');
+
+  // Canonical slug route redirection
+  useEffect(() => {
+    if (pathname === '/location' && currentChurch?.slug) {
+      router.replace(`/${currentChurch.slug}/location`);
+    }
+  }, [pathname, currentChurch?.slug, router]);
 
   useEffect(() => {
     async function loadGroup() {
@@ -186,7 +198,7 @@ export default function CurrentLocationPage() {
               <StopCircle size={18} />
               Stop Location Sharing
             </button>
-          ) : (
+          ) : isAuthorizedToBroadcast ? (
             <button
               id="start-location-btn"
               onClick={startTracking}
@@ -195,6 +207,15 @@ export default function CurrentLocationPage() {
               <Navigation size={18} />
               Start Live GPS Sharing
             </button>
+          ) : (
+            <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-center">
+              <p className="text-xs font-semibold text-amber-900">
+                Driver Authorization Required
+              </p>
+              <p className="text-[11px] text-amber-700 mt-1 leading-relaxed">
+                Only designated Drivers and Administrators can broadcast vehicle GPS tracking.
+              </p>
+            </div>
           )}
         </div>
 

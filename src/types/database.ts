@@ -94,6 +94,7 @@ export interface Group {
   vehicle_number: string | null;
   slug?: string | null;
   is_active: boolean;
+  is_public?: boolean;
   current_latitude: number | null;
   current_longitude: number | null;
   current_speed: number | null;

@@ -7,12 +7,15 @@ interface FamilyCardProps {
   family: Family;
   className?: string;
   compact?: boolean;
+  churchSlug?: string | null;
 }
 
-export function FamilyCard({ family, className, compact = false }: FamilyCardProps) {
+export function FamilyCard({ family, className, compact = false, churchSlug }: FamilyCardProps) {
+  const href = churchSlug ? `/${churchSlug}/families/${family.id}` : `/families/${family.id}`;
+
   return (
     <Link
-      href={`/families/${family.id}`}
+      href={href}
       className={cn('carol-card carol-card-hover block', compact ? 'p-3' : 'p-4', className)}
     >
       <div className="flex items-center gap-3">

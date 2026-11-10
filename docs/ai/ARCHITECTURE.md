@@ -60,6 +60,19 @@ All routes use the App Router (`src/app/` directory).
 | `/api/invites/accept` | `app/api/invites/accept/route.ts` | Accepts invite & creates church membership | Authenticated |
 | `/api/invites/generate` | `app/api/invites/generate/route.ts` | Generates random token & stores token hash | Admin |
 | `/api/invites/deactivate` | `app/api/invites/deactivate/route.ts` | Deactivates invite link | Admin |
+| `/api/live/[churchSlug]/[groupSlug]` | `app/api/live/[churchSlug]/[groupSlug]/route.ts` | Public validated live tracking endpoint | Public |
+
+### Edge Middleware & Security Headers
+Configured in `src/middleware.ts`:
+- Enforces `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy`.
+- Inspects `sb-access-token` session cookie for SSR defense-in-depth on protected paths.
+
+### QR Share Card Architecture
+Implemented in `src/lib/share-card.ts`:
+- Deterministic 1080x1400 canvas card generator.
+- Large QR code pointing to canonical `https://[domain]/[churchSlug]/live/[groupSlug]`.
+- Multi-format output: PNG File, Blob, dataURL, and standalone QR code.
+- Native Web Share integration with file attachments, text messages, and legacy fallback buttons.
 
 ### Planned Routes (Not Yet Created)
 | Route | Purpose |

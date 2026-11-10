@@ -21,7 +21,7 @@ import type { Church } from '@/types/database';
 
 interface ChurchSlugLayoutProps {
   children: ReactNode;
-  params: Promise<any>;
+  params: Promise<{ churchSlug: string }>;
 }
 
 export default function ChurchSlugLayout({ children, params }: ChurchSlugLayoutProps) {
@@ -50,7 +50,7 @@ export default function ChurchSlugLayout({ children, params }: ChurchSlugLayoutP
         }
 
         // 2. Query canonical church by slug
-        const { data: canonical, error: canonErr } = await supabase
+        const { data: canonical } = await supabase
           .from('churches')
           .select('*')
           .eq('slug', cleanSlug)

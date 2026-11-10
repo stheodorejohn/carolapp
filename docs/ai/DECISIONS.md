@@ -540,3 +540,127 @@ Prevents data leakage across churches, prevents misleading tracking data from br
 - `src/test-security.mjs`
 
 **Status:** Implemented
+
+---
+
+## D-025 — Joint Church + Group Resolution and Public RLS Hardening
+
+**Date:** 2026-11-10
+
+**Decision:**  
+Hardened public live tracking route resolution and anonymous database RLS:
+1. `public.groups` extended with `is_public boolean not null default true`.
+2. Public anonymous access strictly requires `is_active = true and is_public = true`.
+3. Canonical route `/[churchSlug]/live/[groupSlug]` resolves `churchSlug` first, then queries groups where `church_id = resolvedChurch.id` and `(slug = groupSlug or id = groupSlug)`.
+4. Cross-church URL manipulation (e.g. `/church-a/live/group-from-church-b`) fails safely with a friendly "This live tracking link is unavailable." notice.
+5. Legacy `/live/[groupId]` route without churchSlug resolves group and issues an automatic canonical redirect to `/${church.slug}/live/${group.slug || group.id}` if active and public.
+6. Created dedicated secure RPC `public.get_public_live_data` and Next.js endpoint `/api/live/[churchSlug]/[groupSlug]` returning strictly safe public fields (no private phone numbers, member notes, or internal details).
+
+**Reason:**  
+Prevents multi-church data exposure and IDOR vulnerabilities while keeping shared links completely backward compatible.
+
+**Affected areas:**
+- `supabase/schema.sql`, `supabase/migration_security_and_hardening.sql`
+- `src/app/live/[groupId]/page.tsx`
+- `src/app/[churchSlug]/live/[groupId]/page.tsx`
+- `src/app/api/live/[churchSlug]/[groupSlug]/route.ts`
+- `src/types/database.ts`
+- `src/test-security.mjs`
+
+**Status:** Implemented
+
+---
+
+## D-026 — Driver & Admin Permission Differentiation for Group Updates
+
+**Date:** 2026-11-10
+
+**Decision:**  
+Restricted group update permissions at both the RLS policy and database trigger level:
+1. Replaced overly broad `is_church_member(church_id)` policy with `is_church_admin_or_driver(church_id)`.
+2. Added PostgreSQL trigger `trg_check_group_update` enforcing that non-admin drivers can ONLY update live location coordinates (`current_latitude`, `current_longitude`, `current_speed`, `current_direction`, `last_location_update`). Drivers are blocked from modifying structural group configuration (name, vehicle number, slug, church_id).
+3. Team members without driver/admin authorization cannot broadcast GPS or modify groups.
+4. On `/location` and `/[churchSlug]/location`, GPS broadcast controls are protected and require verified Driver or Admin authorization.
+
+**Reason:**  
+Prevents unauthorized members from impersonating drivers, modifying vehicle routes, or tampering with tracking telemetry.
+
+**Affected areas:**
+- `supabase/schema.sql`, `supabase/migration_security_and_hardening.sql`
+- `src/app/location/page.tsx`
+- `src/test-security.mjs`
+
+**Status:** Implemented
+
+---
+
+## D-027 — Authoritative Atomic Church Creation
+
+**Date:** 2026-11-10
+
+**Decision:**  
+Made `create_church_with_admin` the authoritative atomic path for organization creation, removing the non-atomic client-side fallback:
+1. `create_church_with_admin` creates the `churches` row and `church_members` admin record in a single database transaction.
+2. Validates church name length, normalizes slug, and checks slug uniqueness across active churches and `church_slug_history` as well as reserved system routes.
+3. If any step fails, the entire transaction is rolled back by PostgreSQL. No half-created orphan church can ever exist without an administrator.
+
+**Reason:**  
+Guarantees tenant integrity and eliminates race conditions or client-side connection drops that could orphan churches.
+
+**Affected areas:**
+- `supabase/schema.sql`, `supabase/migration_security_and_hardening.sql`
+- `src/lib/auth-context.tsx`
+- `src/test-security.mjs`
+
+**Status:** Implemented
+
+---
+
+## D-028 — Deterministic QR Share Card and Platform-Native Sharing
+
+**Date:** 2026-11-10
+
+**Decision:**  
+Created a deterministic client-side Share Card generator in `src/lib/share-card.ts` for the public Live Tracking page:
+1. Renders a high-contrast, church-friendly card (1080x1400) on an offscreen HTML5 canvas (zero DOM/screenshot dependencies).
+2. Hierarchy: Church Name (forest green, 46px), Team Name, Heading ("Follow the Carol Team Live"), large QR Code (560px), clear instruction ("Scan with your phone camera"), and subtitle ("Live location • Carol songs").
+3. QR code points strictly to the canonical production URL: `https://[canonical-domain]/[churchSlug]/live/[groupSlug]`.
+4. Share text formatted with emojis and canonical URL placed below image.
+5. Primary action: single prominent `[ Share Live Tracking ]` button utilizing Web Share API with file attachments where supported (`navigator.canShare({ files: [cardFile] })`).
+6. Fallbacks: Text + URL share, Copy Link, Download Card Image, Download QR Code Only.
+7. Progressive disclosure: GPS broadcast controls shown only to verified Drivers and Admins.
+
+**Reason:**  
+Provides a reliable, beautiful sharing experience for church members aged 14–70 across WhatsApp, SMS, and email.
+
+**Affected areas:**
+- `src/lib/share-card.ts`
+- `src/app/share/page.tsx`
+- `src/app/[churchSlug]/share/page.tsx`
+- `src/test-security.mjs`
+
+**Status:** Implemented
+
+---
+
+## D-029 — HTTP Security Headers & SSR Session Cookie Synchronization
+
+**Date:** 2026-11-10
+
+**Decision:**  
+Strengthened Next.js security and session architecture:
+1. Added Next.js Edge Middleware (`src/middleware.ts`) enforcing security headers (`X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy`).
+2. Session access tokens are synchronized to a secure `sb-access-token` cookie in `src/lib/auth-context.tsx` on sign-in and cleared on sign-out for SSR inspection.
+3. Server API routes (`generate`, `accept`, `deactivate`) support both `Authorization: Bearer` and `sb-access-token` cookie authentication.
+4. Legacy routes (`/families`, `/route`, `/songs`, `/location`, `/share`, `/admin/dashboard`) automatically redirect to canonical `/[churchSlug]/...` routes when user has an active church.
+
+**Reason:**  
+Strengthens Next.js server security posture while maintaining smooth client-side hydration for PWAs.
+
+**Affected areas:**
+- `src/middleware.ts`
+- `src/lib/auth-context.tsx`
+- `src/app/api/invites/*`
+- `src/app/families/page.tsx`, `src/app/route/page.tsx`, `src/app/songs/page.tsx`, `src/app/location/page.tsx`, `src/app/share/page.tsx`, `src/app/admin/dashboard/page.tsx`
+
+**Status:** Implemented

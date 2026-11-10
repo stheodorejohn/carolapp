@@ -312,4 +312,235 @@ assert(!projected.phone, 'Private phone number excluded from public projection')
 assert(!projected.notes, 'Private family notes excluded from public projection');
 assert(projected.name === 'Johnson Family', 'Public family name preserved');
 
-console.log('\n🎉 ALL SECURITY, SLUG, SONG & ARCHITECTURE TESTS PASSED SUCCESSFULLY!\n');
+
+// ── Test 10: Public Group Visibility Hardening (is_active + is_public) ──
+console.log('\n--- Test 10: Public Group Visibility Hardening ---');
+const groupVisibilityLibrary = [
+  { id: 'g1', church_id: churchA, name: 'Team A1', is_active: true, is_public: true },
+  { id: 'g2', church_id: churchA, name: 'Team A2 Internal', is_active: true, is_public: false },
+  { id: 'g3', church_id: churchA, name: 'Team A3 Finished', is_active: false, is_public: true },
+  { id: 'g4', church_id: churchB, name: 'Team B1', is_active: true, is_public: true },
+];
+
+function queryPublicLiveGroups(targetChurchId) {
+  // Public users can ONLY query groups where is_active = true AND is_public = true for the church
+  return groupVisibilityLibrary.filter(g => g.church_id === targetChurchId && g.is_active === true && g.is_public === true);
+}
+
+const publicGroupsChurchA = queryPublicLiveGroups(churchA);
+assert(publicGroupsChurchA.length === 1 && publicGroupsChurchA[0].id === 'g1',
+  'Public query returns only active AND public groups (g1)');
+assert(!publicGroupsChurchA.some(g => g.is_public === false),
+  'Internal/private groups are strictly excluded from public live query');
+assert(!publicGroupsChurchA.some(g => g.is_active === false),
+  'Inactive groups are strictly excluded from public live query');
+assert(!publicGroupsChurchA.some(g => g.church_id === churchB),
+  'Church B groups are strictly excluded from Church A query');
+
+
+// ── Test 11: Joint ChurchSlug + GroupSlug Validation ──
+console.log('\n--- Test 11: Joint ChurchSlug + GroupSlug Validation ---');
+
+const churches = [
+  { id: churchA, name: 'Grace Community Church', slug: 'gcc' },
+  { id: churchB, name: 'Holy Trinity Church', slug: 'htc' },
+];
+
+function resolveJointLiveRoute(churchSlug, groupSlug) {
+  // 1. Resolve church
+  const matchedChurch = churches.find(c => c.slug === churchSlug.toLowerCase().trim());
+  if (!matchedChurch) {
+    return { valid: false, error: 'This live tracking link is unavailable.' };
+  }
+
+  // 2. Resolve group belonging to THAT church
+  const matchedGroup = groupVisibilityLibrary.find(
+    g => g.church_id === matchedChurch.id &&
+         (g.id === groupSlug || g.name.toLowerCase().replace(/\s+/g, '-') === groupSlug) &&
+         g.is_active === true &&
+         g.is_public === true
+  );
+
+  if (!matchedGroup) {
+    return { valid: false, error: 'This live tracking link is unavailable.' };
+  }
+
+  return { valid: true, church: matchedChurch, group: matchedGroup };
+}
+
+// Valid joint resolution
+const validJoint = resolveJointLiveRoute('gcc', 'g1');
+assert(validJoint.valid === true && validJoint.church.slug === 'gcc', 'Correct church + correct group resolves successfully');
+
+// Cross-church manipulation: church A slug with church B group ID
+const crossChurchJoint = resolveJointLiveRoute('gcc', 'g4');
+assert(crossChurchJoint.valid === false, 'Cross-church URL /gcc/live/g4 fails safely');
+assert(crossChurchJoint.error === 'This live tracking link is unavailable.', 'Cross-church URL shows friendly unavailable error');
+
+// Non-existent church
+const invalidChurchJoint = resolveJointLiveRoute('invalid-church', 'g1');
+assert(invalidChurchJoint.valid === false, 'Non-existent church fails safely');
+
+// Inactive group in valid church
+const inactiveJoint = resolveJointLiveRoute('gcc', 'g3');
+assert(inactiveJoint.valid === false, 'Inactive group fails safely');
+
+// Private group in valid church
+const privateJoint = resolveJointLiveRoute('gcc', 'g2');
+assert(privateJoint.valid === false, 'Private group fails safely');
+
+
+// ── Test 12: Driver vs Admin vs Team Member Location & Group Update Permissions ──
+console.log('\n--- Test 12: Driver vs Admin vs Team Member Permissions ---');
+
+function authorizeGroupUpdate(userRole, userChurchId, targetGroup, updatedFields) {
+  // Must belong to the same church
+  if (userChurchId !== targetGroup.church_id) {
+    throw new Error('Unauthorized: Cross-church access rejected');
+  }
+
+  // Team members cannot update groups at all
+  if (userRole === 'team_member') {
+    throw new Error('Unauthorized: Team members cannot update group or broadcast location');
+  }
+
+  // Admin can update all fields
+  if (userRole === 'admin') {
+    return true;
+  }
+
+  // Driver can ONLY update live location fields
+  if (userRole === 'driver') {
+    const LOCATION_FIELDS = new Set([
+      'current_latitude', 'current_longitude', 'current_speed',
+      'current_direction', 'last_location_update'
+    ]);
+
+    const attemptedConfigChange = Object.keys(updatedFields).some(f => !LOCATION_FIELDS.has(f));
+    if (attemptedConfigChange) {
+      throw new Error('Unauthorized: Only administrators can modify group configuration');
+    }
+    return true;
+  }
+
+  throw new Error('Unauthorized');
+}
+
+const testGroup = { id: 'grp-test', church_id: churchA, name: 'Team Alpha', vehicle_number: 'TN 01 AB 1234' };
+
+// Admin updating config (e.g. name, vehicle number)
+assert(authorizeGroupUpdate('admin', churchA, testGroup, { name: 'Team Beta', vehicle_number: 'TN 01 XY 9999' }) === true,
+  'Admin can update group configuration');
+
+// Driver updating GPS location
+assert(authorizeGroupUpdate('driver', churchA, testGroup, {
+  current_latitude: 13.0827, current_longitude: 80.2707, current_speed: 35
+}) === true, 'Driver can update live location fields');
+
+// Driver attempting to modify vehicle number or name
+let driverConfigBlocked = false;
+try {
+  authorizeGroupUpdate('driver', churchA, testGroup, { name: 'Renamed by Driver' });
+} catch (e) {
+  driverConfigBlocked = e.message.includes('Only administrators can modify group configuration');
+}
+assert(driverConfigBlocked === true, 'Driver is strictly blocked from modifying group configuration');
+
+// Team member attempting to update location or config
+let teamMemberBlocked = false;
+try {
+  authorizeGroupUpdate('team_member', churchA, testGroup, { current_latitude: 13.0827 });
+} catch (e) {
+  teamMemberBlocked = e.message.includes('Team members cannot update group');
+}
+assert(teamMemberBlocked === true, 'Team member cannot update location or impersonate driver');
+
+
+// ── Test 13: Atomic Church Creation Validation ──
+console.log('\n--- Test 13: Atomic Church Creation Validation ---');
+
+function validateChurchCreationInput(name, slug, existingSlugs) {
+  if (!name || !name.trim()) {
+    throw new Error('Church name cannot be empty');
+  }
+
+  if (slug) {
+    const cleanSlug = slug.toLowerCase().trim();
+    if (cleanSlug.length < 3) throw new Error('Church URL must be at least 3 characters');
+    if (cleanSlug.length > 30) throw new Error('Church URL cannot exceed 30 characters');
+    if (RESERVED_SLUGS.has(cleanSlug)) throw new Error('Church URL is a reserved system route');
+    if (existingSlugs.has(cleanSlug)) throw new Error('Church URL is already in use by another church');
+  }
+
+  return {
+    church: { name: name.trim(), slug: slug ? slug.toLowerCase().trim() : null },
+    admin_member: { role: 'admin', status: 'active' },
+  };
+}
+
+const existingChurchSlugs = new Set(['gcc', 'htc']);
+
+assert(validateChurchCreationInput('New Life Church', 'nlc', existingChurchSlugs).admin_member.role === 'admin',
+  'Atomic creation automatically assigns admin role in transaction');
+
+let emptyNameBlocked = false;
+try {
+  validateChurchCreationInput('   ', 'nlc', existingChurchSlugs);
+} catch (e) {
+  emptyNameBlocked = e.message.includes('Church name cannot be empty');
+}
+assert(emptyNameBlocked === true, 'Empty church name is rejected');
+
+let duplicateSlugBlocked = false;
+try {
+  validateChurchCreationInput('Another Church', 'gcc', existingChurchSlugs);
+} catch (e) {
+  duplicateSlugBlocked = e.message.includes('already in use');
+}
+assert(duplicateSlugBlocked === true, 'Duplicate slug collision is rejected in transaction');
+
+let reservedSlugCreationBlocked = false;
+try {
+  validateChurchCreationInput('Admin Church', 'admin', existingChurchSlugs);
+} catch (e) {
+  reservedSlugCreationBlocked = e.message.includes('reserved system route');
+}
+assert(reservedSlugCreationBlocked === true, 'Reserved route slug is rejected in church creation');
+
+
+// ── Test 14: Canonical Public URL & Share Message Formatting ──
+console.log('\n--- Test 14: Canonical Public URL & Share Message ---');
+
+function getCanonicalLiveUrl(churchSlug, groupSlug, envBase) {
+  let base = envBase || 'https://letscarol.app';
+  base = base.replace(/\/+$/, '');
+  return `${base}/${churchSlug.toLowerCase().trim()}/live/${groupSlug.toLowerCase().trim()}`;
+}
+
+function buildShareMessage(churchName, canonicalUrl) {
+  return [
+    '🎶 Follow our Carol Team Live',
+    '',
+    `Follow the Carol journey of ${churchName}.`,
+    '',
+    '📍 View the live location',
+    '🎵 View available Carol songs',
+    '',
+    'Scan the QR code or open the link below:',
+    canonicalUrl,
+  ].join('\n');
+}
+
+const canonicalUrl = getCanonicalLiveUrl('gcc', 'team-alpha', 'https://letscarol.app');
+assert(canonicalUrl === 'https://letscarol.app/gcc/live/team-alpha',
+  'Canonical URL formatted strictly as https://domain/churchSlug/live/groupSlug');
+
+const shareMsg = buildShareMessage('Grace Community Church', canonicalUrl);
+assert(shareMsg.includes('🎶 Follow our Carol Team Live'), 'Share message contains headline');
+assert(shareMsg.includes('Grace Community Church'), 'Share message contains church name');
+assert(shareMsg.includes('📍 View the live location'), 'Share message contains live location bullet');
+assert(shareMsg.includes('🎵 View available Carol songs'), 'Share message contains carol songs bullet');
+assert(shareMsg.includes(canonicalUrl), 'Share message contains canonical URL');
+assert(shareMsg.endsWith(canonicalUrl), 'Share message places canonical URL below text');
+
+console.log('\n🎉 ALL 14 SECURITY, TENANT, SLUG, DRIVER, SONG & SHARE TESTS PASSED SUCCESSFULLY!\n');

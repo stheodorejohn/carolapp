@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
+import { useRouter, usePathname } from 'next/navigation';
 import { ChevronLeft, MapPin, Navigation, CheckCircle2, Clock3 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth-context';
@@ -13,10 +14,19 @@ type RouteFilter = 'all' | 'pending' | 'visited';
 
 export default function TeamRoutePage() {
   const { currentChurch } = useAuth();
+  const router = useRouter();
+  const pathname = usePathname();
   const [group, setGroup]   = useState<Group | null>(null);
   const [routes, setRoutes] = useState<Route[]>([]);
   const [filter, setFilter] = useState<RouteFilter>('all');
   const [loading, setLoading] = useState(true);
+
+  // Canonical slug route redirection
+  useEffect(() => {
+    if (pathname === '/route' && currentChurch?.slug) {
+      router.replace(`/${currentChurch.slug}/route`);
+    }
+  }, [pathname, currentChurch?.slug, router]);
 
   useEffect(() => {
     async function load() {
@@ -202,6 +212,7 @@ export default function TeamRoutePage() {
                 route={route}
                 index={routes.findIndex(r => r.id === route.id) + 1}
                 isLast={i === filteredRoutes.length - 1}
+                churchSlug={currentChurch?.slug}
               />
             ))}
           </div>

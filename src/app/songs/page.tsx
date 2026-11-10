@@ -17,6 +17,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
+import { useRouter, usePathname } from 'next/navigation';
 import { Plus, Search, Music, EyeOff } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth-context';
@@ -25,6 +26,8 @@ import type { Song } from '@/types/database';
 
 export default function SongsPage() {
   const { currentChurch, user, activeRole } = useAuth();
+  const router = useRouter();
+  const pathname = usePathname();
   const [songs, setSongs] = useState<Song[]>([]);
   const [filtered, setFiltered] = useState<Song[]>([]);
   const [search, setSearch] = useState('');
@@ -33,6 +36,13 @@ export default function SongsPage() {
   const [togglingId, setTogglingId] = useState<string | null>(null);
 
   const isAdmin = activeRole === 'admin' || user?.churchRole === 'admin';
+
+  // Canonical slug route redirection
+  useEffect(() => {
+    if (pathname === '/songs' && currentChurch?.slug) {
+      router.replace(`/${currentChurch.slug}/songs`);
+    }
+  }, [pathname, currentChurch?.slug, router]);
 
   const loadSongs = useCallback(async () => {
     try {
@@ -122,7 +132,7 @@ export default function SongsPage() {
 
           {isAdmin && (
             <Link
-              href="/songs/new"
+              href={currentChurch?.slug ? `/${currentChurch.slug}/songs/new` : '/songs/new'}
               className="flex items-center gap-1.5 bg-green-700 hover:bg-green-800 text-white text-xs font-semibold px-3.5 py-2.5 rounded-full shadow-sm transition-colors"
             >
               <Plus size={15} />
@@ -204,6 +214,7 @@ export default function SongsPage() {
                 isAdmin={isAdmin}
                 onToggleHide={handleToggleHide}
                 hideToggling={togglingId === song.id}
+                churchSlug={currentChurch?.slug}
               />
             ))}
           </div>

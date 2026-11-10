@@ -7,10 +7,43 @@
 
 ## Current Status
 
-**Current phase:** Phase 13 (Church Slugs, Slug-Based Routing, Song Administration, Public Live Songbook & Security Hardening COMPLETED)
+**Current phase:** Phase 14 (Security Audit, RLS Hardening, Public Live Security, QR Share Card & Route Consolidation COMPLETED)
 
 **Last completed task:**  
-- **Phase 13 (Church Slugs, Slug-Based Routing & Song Administration):**
+- **Phase 14 (Security Hardening, QR Share Card & Route Consolidation):**
+  - **Public RLS & Visibility Hardening (`supabase/schema.sql`, `supabase/migration_security_and_hardening.sql`):**
+    - Extended `public.groups` with `is_public boolean not null default true` and `idx_groups_church_visibility` index.
+    - Updated anon select policy on `public.groups` to strictly require `is_active = true and is_public = true`.
+    - Created dedicated secure PostgreSQL RPC `public.get_public_live_data(p_church_slug, p_group_slug)` and `public.get_public_live_songs(p_church_slug)` for safe projection without exposing private notes, phone numbers, or member details.
+  - **Joint ChurchSlug + GroupSlug Route Resolution (`src/app/live/[groupId]/page.tsx`, `src/app/[churchSlug]/live/[groupId]/page.tsx`):**
+    - `src/app/[churchSlug]/live/[groupId]/page.tsx` passes both identifiers into `LiveTrackingContent`.
+    - Resolves church first via canonical slug or `church_slug_history`, then resolves group strictly belonging to that church (`church_id = resolvedChurch.id`).
+    - Cross-church URL manipulation (`/church-a/live/group-from-church-b`) fails safely with a friendly "This live tracking link is unavailable." notice without fallback or silent redirect.
+    - Legacy `/live/[groupId]` route without churchSlug automatically redirects to canonical `/[churchSlug]/live/[groupSlug]`.
+    - Added defense-in-depth API route at `src/app/api/live/[churchSlug]/[groupSlug]/route.ts`.
+  - **Driver & Location Update Permission Hardening:**
+    - Replaced overly broad `is_church_member` update policy on `public.groups` with `is_church_admin_or_driver(church_id)`.
+    - Added PostgreSQL trigger `trg_check_group_update` enforcing that non-admin drivers can ONLY update live location coordinates (`current_latitude`, `current_longitude`, `current_speed`, `current_direction`, `last_location_update`). Drivers are blocked from modifying structural group configuration (name, vehicle number, slug, church_id).
+    - Protected GPS broadcasting controls on `/location` and `/[churchSlug]/location`: non-driver/non-admin team members cannot start broadcast.
+  - **Authoritative Atomic Church Creation:**
+    - Removed non-atomic client-side fallback in `src/lib/auth-context.tsx`.
+    - Authoritative path is `create_church_with_admin` RPC: creates church and assigns initial admin membership in a single atomic database transaction with slug uniqueness, length, and reserved route checks.
+  - **Session Architecture & Next.js Edge Middleware:**
+    - Added `src/middleware.ts` attaching security headers (`X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy`).
+    - Implemented `syncSessionCookie` in `auth-context.tsx` synchronizing access token to `sb-access-token` secure cookie on sign-in and clearing on sign-out.
+    - Server invite API routes support both Bearer authorization headers and session cookies.
+  - **Deterministic QR Share Card & Native Sharing (`src/lib/share-card.ts`, `src/app/share/page.tsx`):**
+    - Created `src/lib/share-card.ts` using `qrcode` and HTML5 offscreen canvas to generate 1080x1400 crisp, church-friendly share cards with zero DOM screenshot dependencies.
+    - Card includes Church Name, Team Name, Heading ("Follow the Carol Team Live"), large QR code (560px), clear instruction ("Scan with your phone camera"), and subtitle ("Live location • Carol songs").
+    - QR code points strictly to canonical URL `https://[domain]/[churchSlug]/live/[groupSlug]`.
+    - Native Web Share integration with file attachments (`navigator.canShare({ files: [cardFile] })`), formatted message text, and fallback Copy Link, Download Card, Download QR buttons.
+    - Designed with low cognitive load for ages 14–70.
+  - **Legacy Route Consolidation:**
+    - Legacy routes (`/families`, `/route`, `/songs`, `/location`, `/share`, `/admin/dashboard`) automatically redirect to canonical `/[churchSlug]/...` routes when user has an active church.
+    - Shared cards (`FamilyCard`, `RouteCard`, `SongCard`) accept optional `churchSlug` and generate slug-prefixed links.
+  - **Testing & Verification:**
+    - Extended automated security test suite `src/test-security.mjs` to 14 comprehensive test suites covering public RLS, joint route resolution, driver permissions, atomic creation, canonical URL generation, and share message text. 100% passing.
+    - TypeScript compilation (`tsc --noEmit`): 0 errors.
   - **Church Slug Architecture (`src/lib/slug.ts`, `supabase/migration_slugs_and_songs.sql`):**
     - Deterministic slug suggestion algorithm prioritizing memorable initials/acronyms (`Grace Community Church` → `gcc`, `St. Mary's Church Chennai` → `smcc`, `Holy Trinity Church` → `htc`).
     - Slug normalization: lowercase, strips punctuation/apostrophes, converts non-alphanumeric to hyphens, deduplicates and strips boundary hyphens.
@@ -106,6 +139,10 @@ Phase 13 — Church Slugs, Slug-Based Routing & Song Administration
 ## Modified & Created Files
 
 ### Files Created:
+- `src/lib/share-card.ts` (Deterministic 1080x1400 canvas card and QR generator)
+- `src/middleware.ts` (Next.js Edge Middleware for HTTP security headers and SSR session inspection)
+- `src/app/api/live/[churchSlug]/[groupSlug]/route.ts` (Safe public live tracking endpoint)
+- `supabase/migration_security_and_hardening.sql` (Public RLS hardening, atomic church creation, driver location update triggers)
 - `src/lib/slug.ts` (Centralized slug normalization, acronym suggestion, and reserved routes)
 - `src/app/api/churches/check-slug/route.ts` (Debounced slug availability API)
 - `src/app/songs/new/page.tsx` (Admin song creation page)

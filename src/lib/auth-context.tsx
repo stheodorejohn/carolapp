@@ -70,6 +70,16 @@ interface AuthContextValue {
 const STORAGE_KEY_ACTIVE_ROLE = 'carol_active_role';
 const STORAGE_KEY_ACTIVE_CHURCH = 'carol_active_church_id';
 
+function syncSessionCookie(s: Session | null) {
+  if (typeof document === 'undefined') return;
+  if (s?.access_token) {
+    const maxAge = s.expires_in ?? 60 * 60 * 24 * 7;
+    document.cookie = `sb-access-token=${s.access_token}; path=/; max-age=${maxAge}; SameSite=Lax`;
+  } else {
+    document.cookie = 'sb-access-token=; path=/; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
+  }
+}
+
 export function deriveAuthorizedRoles(membershipRole: ChurchRole | null): AppRole[] {
   if (membershipRole === 'admin') {
     return ['admin', 'team_member', 'driver'];
@@ -205,6 +215,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         const { data: { session: s } } = await supabase.auth.getSession();
         setSession(s);
+        syncSessionCookie(s);
 
         if (s?.user) {
           const { church, membership, role } = await loadChurchData(s.user);
@@ -229,6 +240,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (_event, s) => {
         setSession(s);
+        syncSessionCookie(s);
         if (s?.user) {
           const { church, membership, role } = await loadChurchData(s.user);
           setCurrentChurch(church);
@@ -338,57 +350,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!churchName) throw new Error('Church name cannot be empty');
     const cleanSlug = slug ? normalizeSlug(slug) : null;
 
-    // Attempt RPC first
-    try {
-      const { data, error } = await supabase.rpc('create_church_with_admin', {
-        church_name: churchName,
-        church_slug: cleanSlug,
-      });
-
-      if (!error && data) {
-        const createdChurch = data as Church;
-        if (typeof window !== 'undefined') {
-          localStorage.setItem(STORAGE_KEY_ACTIVE_CHURCH, createdChurch.id);
-        }
-        await refreshChurch();
-        return createdChurch;
-      }
-    } catch {
-      // Fallback below
-    }
-
-    // Direct fallback insertion
-    const { data: { user: currentUser } } = await supabase.auth.getUser();
-    if (!currentUser) throw new Error('Authentication required to create a church');
-
-    const { data: newChurch, error: churchErr } = await supabase
-      .from('churches')
-      .insert({
-        name: churchName,
-        slug: cleanSlug,
-        created_by: currentUser.id,
-      })
-      .select('*')
-      .single();
-
-    if (churchErr || !newChurch) {
-      throw churchErr ?? new Error('Failed to create church record');
-    }
-
-    // Add caller as Admin
-    await supabase.from('church_members').insert({
-      church_id: newChurch.id,
-      user_id: currentUser.id,
-      role: 'admin',
-      status: 'active',
+    // Authoritative atomic church creation: creates church record + admin membership in a single transaction
+    const { data, error } = await supabase.rpc('create_church_with_admin', {
+      church_name: churchName,
+      church_slug: cleanSlug,
     });
 
-    if (typeof window !== 'undefined') {
-      localStorage.setItem(STORAGE_KEY_ACTIVE_CHURCH, newChurch.id);
+    if (error) {
+      console.error('[Auth] create_church_with_admin error:', error);
+      throw new Error(error.message || 'Failed to create church record');
     }
 
+    if (!data) {
+      throw new Error('Failed to create church record');
+    }
+
+    const createdChurch = data as Church;
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(STORAGE_KEY_ACTIVE_CHURCH, createdChurch.id);
+    }
     await refreshChurch();
-    return newChurch as Church;
+    return createdChurch;
   }, [refreshChurch]);
 
   const requestPasswordReset = useCallback(async (email: string) => {
@@ -413,6 +395,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch {
       // Ignore
     }
+    syncSessionCookie(null);
     await supabase.auth.signOut();
     setUser(null);
     setCurrentChurch(null);

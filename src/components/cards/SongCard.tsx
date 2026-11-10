@@ -10,6 +10,7 @@ interface SongCardProps {
   isAdmin?: boolean;
   onToggleHide?: (song: Song, e: React.MouseEvent) => void;
   hideToggling?: boolean;
+  churchSlug?: string | null;
 }
 
 const ACCENT_COLORS = [
@@ -27,8 +28,11 @@ export function SongCard({
   isAdmin = false,
   onToggleHide,
   hideToggling = false,
+  churchSlug,
 }: SongCardProps) {
   const colorClass = ACCENT_COLORS[index % ACCENT_COLORS.length];
+  const songDetailHref = churchSlug ? `/${churchSlug}/songs/${song.id}` : `/songs/${song.id}`;
+  const songEditHref = churchSlug ? `/${churchSlug}/songs/${song.id}/edit` : `/songs/${song.id}/edit`;
 
   return (
     <div
@@ -39,7 +43,7 @@ export function SongCard({
       )}
     >
       <Link
-        href={`/songs/${song.id}`}
+        href={songDetailHref}
         className="flex items-center gap-3 flex-1 min-w-0"
       >
         {/* Index / icon */}
@@ -104,7 +108,7 @@ export function SongCard({
           )}
 
           <Link
-            href={`/songs/${song.id}/edit`}
+            href={songEditHref}
             className="p-2 text-slate-400 hover:text-green-700 hover:bg-green-50 rounded-lg transition-colors"
             title="Edit song"
           >
@@ -113,7 +117,7 @@ export function SongCard({
         </div>
       ) : (
         <Link
-          href={`/songs/${song.id}`}
+          href={songDetailHref}
           className="flex items-center gap-2 flex-shrink-0 pl-2 text-slate-300 hover:text-slate-500"
         >
           <span className="flex items-center justify-center w-7 h-7 rounded-full bg-slate-50 text-slate-400">

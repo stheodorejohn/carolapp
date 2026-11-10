@@ -11,7 +11,7 @@ import { supabase, createServerClient } from '@/lib/supabase';
 export async function POST(req: NextRequest) {
   try {
     const authHeader = req.headers.get('Authorization') ?? req.headers.get('authorization');
-    const tokenHeader = authHeader?.replace(/^Bearer\s+/i, '');
+    const tokenHeader = authHeader?.replace(/^Bearer\s+/i, '') || req.cookies.get('sb-access-token')?.value;
 
     if (!tokenHeader) {
       return NextResponse.json(

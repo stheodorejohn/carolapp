@@ -16,6 +16,7 @@
 
 import dynamic from 'next/dynamic';
 import { useEffect, useState, use, useCallback, Suspense } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   Clock, Navigation, Music, Search, X, BookOpen, AlertCircle, RefreshCw, CheckCircle2
 } from 'lucide-react';
@@ -30,13 +31,14 @@ const LiveMap = dynamic(() => import('@/components/map/LiveMap'), {
 });
 
 interface LiveTrackingPageProps {
-  params: Promise<{ groupId: string }>;
+  params: Promise<{ groupId: string; churchSlug?: string }>;
 }
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function LiveTrackingContent({ params }: LiveTrackingPageProps) {
-  const { groupId } = use(params);
+  const { groupId, churchSlug } = use(params);
+  const router = useRouter();
 
   const [activeTab, setActiveTab] = useState<'live' | 'songs'>('live');
   const [group, setGroup] = useState<(Group & { church_name?: string }) | null>(null);
@@ -50,7 +52,52 @@ function LiveTrackingContent({ params }: LiveTrackingPageProps) {
 
   const loadData = useCallback(async () => {
     try {
-      // 1. Fetch group by either UUID or slug (avoid UUID syntax errors)
+      let resolvedChurchId: string | null = null;
+      let resolvedChurchName: string | null = null;
+      let resolvedChurchSlug: string | null = null;
+
+      // 1. Resolve church if churchSlug is provided in the route
+      if (churchSlug) {
+        const cleanSlug = churchSlug.trim().toLowerCase();
+
+        // Check canonical church
+        const { data: canon } = await supabase
+          .from('churches')
+          .select('id, name, slug')
+          .eq('slug', cleanSlug)
+          .maybeSingle();
+
+        if (canon) {
+          resolvedChurchId = canon.id;
+          resolvedChurchName = canon.name;
+          resolvedChurchSlug = canon.slug;
+        } else {
+          // Check slug history
+          const { data: hist } = await supabase
+            .from('church_slug_history')
+            .select('church_id, churches(id, name, slug)')
+            .eq('slug', cleanSlug)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          const raw = hist && Array.isArray(hist.churches) ? hist.churches[0] : (hist as any)?.churches;
+          if (raw) {
+            resolvedChurchId = raw.id;
+            resolvedChurchName = raw.name;
+            resolvedChurchSlug = raw.slug;
+          }
+        }
+
+        // Church slug does not exist -> fail safely immediately
+        if (!resolvedChurchId) {
+          setNotFound(true);
+          setLoading(false);
+          return;
+        }
+      }
+
+      // 2. Fetch group by UUID or slug with strict church boundary
       let query = supabase
         .from('groups')
         .select(`
@@ -58,6 +105,7 @@ function LiveTrackingContent({ params }: LiveTrackingPageProps) {
           church_id,
           name,
           vehicle_number,
+          slug,
           current_latitude,
           current_longitude,
           current_speed,
@@ -68,6 +116,11 @@ function LiveTrackingContent({ params }: LiveTrackingPageProps) {
         `)
         .eq('is_active', true);
 
+      // Multi-church isolation: require group to belong to the resolved church
+      if (resolvedChurchId) {
+        query = query.eq('church_id', resolvedChurchId);
+      }
+
       if (UUID_REGEX.test(groupId)) {
         query = query.or(`id.eq.${groupId},slug.eq.${groupId}`);
       } else {
@@ -76,7 +129,7 @@ function LiveTrackingContent({ params }: LiveTrackingPageProps) {
 
       const { data: groupData, error: groupErr } = await query.maybeSingle();
 
-      // STRICT SECURITY: Do NOT fallback silently to another group if requested group is missing
+      // STRICT SECURITY: Fail safely if group is missing, inactive, or belongs to another church
       if (groupErr || !groupData) {
         setNotFound(true);
         setLoading(false);
@@ -86,6 +139,13 @@ function LiveTrackingContent({ params }: LiveTrackingPageProps) {
       const rawChurch = Array.isArray(groupData.churches)
         ? groupData.churches[0]
         : groupData.churches;
+
+      // Legacy redirect: if visited via un-scoped /live/[groupId], redirect to canonical /[churchSlug]/live/[groupSlug]
+      if (!churchSlug && rawChurch?.slug) {
+        const canonicalGroup = groupData.slug || groupData.id;
+        router.replace(`/${rawChurch.slug}/live/${canonicalGroup}`);
+        return;
+      }
 
       const loadedGroup = {
         id: groupData.id,
@@ -100,14 +160,14 @@ function LiveTrackingContent({ params }: LiveTrackingPageProps) {
         current_direction: groupData.current_direction,
         last_location_update: groupData.last_location_update,
         created_at: new Date().toISOString(),
-        church_name: rawChurch?.name ?? 'Let’s Carol',
+        church_name: rawChurch?.name ?? resolvedChurchName ?? 'Let’s Carol',
       };
 
       setGroup(loadedGroup);
       setUpdatedAt(new Date().toISOString());
       setNotFound(false);
 
-      // 2. Fetch routes with minimal public fields
+      // 3. Fetch routes with minimal public fields
       const { data: routeData } = await supabase
         .from('routes')
         .select('id, group_id, status, eta, order_index, family:families(id, name, address)')
@@ -118,12 +178,13 @@ function LiveTrackingContent({ params }: LiveTrackingPageProps) {
         setRoutes((routeData as unknown) as Route[]);
       }
 
-      // 3. Fetch public carols for this church (only unhidden and public)
-      if (groupData.church_id) {
+      // 4. Fetch public carols for this church (only unhidden and public)
+      const targetChurchId = resolvedChurchId || groupData.church_id;
+      if (targetChurchId) {
         const { data: songData } = await supabase
           .from('songs')
           .select('id, title, artist, lyrics, category, order_index')
-          .eq('church_id', groupData.church_id)
+          .eq('church_id', targetChurchId)
           .eq('is_hidden', false)
           .eq('is_public', true)
           .order('order_index', { ascending: true });
@@ -134,10 +195,11 @@ function LiveTrackingContent({ params }: LiveTrackingPageProps) {
       }
     } catch (err) {
       console.error('[LiveTrackingPage] load error:', err);
+      setNotFound(true);
     } finally {
       setLoading(false);
     }
-  }, [groupId]);
+  }, [groupId, churchSlug, router]);
 
   useEffect(() => {
     loadData();

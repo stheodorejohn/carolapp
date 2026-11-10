@@ -4,6 +4,41 @@
 
 ---
 
+## 2026-11-10 — Security Audit, RLS Hardening, Public Live Security, QR Share Card & Route Consolidation
+
+- **Public RLS Exposure & Groups Visibility Hardening**:
+  - Extended `public.groups` with `is_public boolean not null default true` and `idx_groups_church_visibility` index.
+  - Hardened anon RLS policy to strictly require `is_active = true and is_public = true`.
+  - Created dedicated PostgreSQL RPC `get_public_live_data(p_church_slug, p_group_slug)` and `get_public_live_songs(p_church_slug)` for safe projection without exposing private notes, phone numbers, or member details.
+- **Joint ChurchSlug + GroupSlug Route Resolution**:
+  - `src/app/[churchSlug]/live/[groupId]/page.tsx` forwards church and group identifiers together.
+  - `LiveTrackingContent` resolves church first, then queries groups where `church_id = resolvedChurch.id`.
+  - Cross-church URL manipulation (`/church-a/live/group-from-church-b`) fails safely with a friendly "This live tracking link is unavailable." notice without fallback or silent redirect.
+  - Legacy `/live/[groupId]` route without churchSlug automatically redirects to canonical `/[churchSlug]/live/[groupSlug]`.
+  - Created dedicated endpoint `/api/live/[churchSlug]/[groupSlug]/route.ts`.
+- **Driver & Location Update Permission Hardening**:
+  - Replaced overly broad `is_church_member` update policy on `public.groups` with `is_church_admin_or_driver(church_id)`.
+  - Added PostgreSQL trigger `trg_check_group_update` restricting non-admin drivers to update ONLY live location coordinates (`current_latitude`, `current_longitude`, `current_speed`, `current_direction`, `last_location_update`). Drivers are blocked from modifying structural group configuration (name, vehicle number, slug, church_id).
+  - Protected GPS broadcasting controls on `/location` and `/[churchSlug]/location`: non-driver/non-admin team members cannot start broadcast.
+- **Authoritative Atomic Church Creation**:
+  - Removed non-atomic client-side fallback in `src/lib/auth-context.tsx`.
+  - Authoritative path is `create_church_with_admin` RPC: creates church and assigns initial admin membership in a single atomic database transaction with slug uniqueness, length, and reserved route checks.
+- **Session Architecture & Next.js Edge Middleware**:
+  - Added `src/middleware.ts` attaching security headers (`X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy`).
+  - Implemented `syncSessionCookie` in `auth-context.tsx` synchronizing access token to `sb-access-token` secure cookie on sign-in and clearing on sign-out.
+  - Server invite API routes support both Bearer authorization headers and session cookies.
+- **Deterministic QR Share Card & Native Sharing**:
+  - Created `src/lib/share-card.ts` using `qrcode` and HTML5 offscreen canvas to generate 1080x1400 crisp, church-friendly share cards with zero DOM screenshot dependencies.
+  - Card includes Church Name, Team Name, Heading ("Follow the Carol Team Live"), large QR code (560px), clear instruction ("Scan with your phone camera"), and subtitle ("Live location • Carol songs").
+  - QR code points strictly to canonical URL `https://[domain]/[churchSlug]/live/[groupSlug]`.
+  - Native Web Share integration with file attachments (`navigator.canShare({ files: [cardFile] })`), formatted message text, and fallback Copy Link, Download Card, Download QR buttons.
+- **Legacy Route Consolidation**:
+  - Legacy routes (`/families`, `/route`, `/songs`, `/location`, `/share`, `/admin/dashboard`) automatically redirect to canonical `/[churchSlug]/...` routes when user has an active church.
+  - Shared cards (`FamilyCard`, `RouteCard`, `SongCard`) accept optional `churchSlug` and generate slug-prefixed links.
+- **Testing & Verification**:
+  - Extended automated security test suite `src/test-security.mjs` to 14 comprehensive test suites covering public RLS, joint route resolution, driver permissions, atomic creation, canonical URL generation, and share message text. 100% passing.
+  - TypeScript compilation (`tsc --noEmit`): 0 errors.
+
 ## 2026-11-10 — Church Slugs, Slug-Based Routing, Song Administration & Public Live Songbook
 
 - **Church Slug Architecture & Generation Utility (`src/lib/slug.ts`, `supabase/migration_slugs_and_songs.sql`)**:

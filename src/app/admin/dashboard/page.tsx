@@ -12,10 +12,11 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter, usePathname } from 'next/navigation';
 import {
-  Users, UsersRound, MapPin, Music, Link2, Shield,
-  Navigation, LogOut, ChevronRight, Info, CheckCircle2,
-  CalendarDays, RefreshCw, Car, User, Church as ChurchIcon
+  Users, UsersRound, MapPin, Music, Link2,
+  Navigation, LogOut, ChevronRight, Info,
+  Car, Church as ChurchIcon
 } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { supabase } from '@/lib/supabase';
@@ -24,10 +25,19 @@ import type { DashboardStats, Group } from '@/types/database';
 
 export default function MorePage() {
   const { user, activeRole, authorizedRoles, currentChurch, signOut } = useAuth();
+  const router = useRouter();
+  const pathname = usePathname();
   const [roleModalOpen, setRoleModalOpen] = useState(false);
   const [activeGroup, setActiveGroup] = useState<Group | null>(null);
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Canonical slug route redirection
+  useEffect(() => {
+    if (pathname === '/admin/dashboard' && currentChurch?.slug) {
+      router.replace(`/${currentChurch.slug}/admin/dashboard`);
+    }
+  }, [pathname, currentChurch?.slug, router]);
 
   useEffect(() => {
     async function loadSummary() {

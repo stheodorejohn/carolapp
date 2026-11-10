@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { ChevronRight, Home, MapPin, Clock } from 'lucide-react';
+import { ChevronRight, Home, Clock } from 'lucide-react';
 import { Route } from '@/types/database';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { cn } from '@/lib/utils';
@@ -10,10 +10,12 @@ interface RouteCardProps {
   index: number;
   isLast?: boolean;
   compact?: boolean;
+  churchSlug?: string | null;
 }
 
-export function RouteCard({ route, index, isLast = false, compact = false }: RouteCardProps) {
+export function RouteCard({ route, index, isLast = false, compact = false, churchSlug }: RouteCardProps) {
   const { family, status } = route;
+  const href = churchSlug ? `/${churchSlug}/route/${route.id}` : `/route/${route.id}`;
 
   return (
     <div className="relative flex gap-3">
@@ -35,7 +37,7 @@ export function RouteCard({ route, index, isLast = false, compact = false }: Rou
 
       {/* Card body */}
       <Link
-        href={`/route/${route.id}`}
+        href={href}
         className={cn(
           'carol-card carol-card-hover flex-1 mb-3 p-4 block transition-all',
           compact && 'p-3',
