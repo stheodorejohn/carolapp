@@ -230,9 +230,9 @@ export default function ShareLocationPage() {
           </p>
 
           {generating ? (
-            <div className="w-full aspect-[1080/1400] max-w-xs mx-auto rounded-2xl bg-slate-100 flex flex-col items-center justify-center p-6 text-slate-400">
+            <div className="w-full aspect-[682/1024] max-w-xs mx-auto rounded-2xl bg-slate-100 flex flex-col items-center justify-center p-6 text-slate-400">
               <RefreshCw size={28} className="animate-spin text-green-600 mb-3" />
-              <p className="text-xs font-medium">Generating high-contrast share card…</p>
+              <p className="text-xs font-medium">Generating festive share card…</p>
             </div>
           ) : cardResult ? (
             <div className="w-full max-w-xs mx-auto rounded-2xl overflow-hidden border border-slate-200 shadow-sm bg-white">

@@ -27,11 +27,12 @@
   - Added `src/middleware.ts` attaching security headers (`X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy`).
   - Implemented `syncSessionCookie` in `auth-context.tsx` synchronizing access token to `sb-access-token` secure cookie on sign-in and clearing on sign-out.
   - Server invite API routes support both Bearer authorization headers and session cookies.
-- **Deterministic QR Share Card & Native Sharing**:
-  - Created `src/lib/share-card.ts` using `qrcode` and HTML5 offscreen canvas to generate 1080x1400 crisp, church-friendly share cards with zero DOM screenshot dependencies.
-  - Card includes Church Name, Team Name, Heading ("Follow the Carol Team Live"), large QR code (560px), clear instruction ("Scan with your phone camera"), and subtitle ("Live location • Carol songs").
-  - QR code points strictly to canonical URL `https://[domain]/[churchSlug]/live/[groupSlug]`.
-  - Native Web Share integration with file attachments (`navigator.canShare({ files: [cardFile] })`), formatted message text, and fallback Copy Link, Download Card, Download QR buttons.
+- **Deterministic QR Share Card & Native Sharing (Festive Christmas Template)**:
+  - Upgraded `src/lib/share-card.ts` to utilize the authentic Let's Carol Christmas acrylic template (`public/share-card-template.jpg`, 682x1024) featuring glowing Nativity, Christmas tree, festive red ribbon, acrylic frame, and snow-draped lantern.
+  - Dynamically draws: Church Name & optional Team Name (top sky), Ribbon title ("Follow the Carol Team Live"), large scannable QR code centered in the white/gold inner frame (260x260), feature subtitle ("Live location • Carol songs"), bottom URL capsule, and gold script branding ("Let's Carol") on the wooden base.
+  - **Removed "Scan with your phone camera" text and phone icon per user design directive**, keeping the frosted acrylic pane clean, spacious, and elegant.
+  - Generates PNG File, Blob, and data URL for direct WhatsApp/SMS sharing via Web Share API (`navigator.canShare`), with fallback buttons for Copy Link, Download Card, and Download QR.
+  - Built-in procedural rendering fallback ensures image generation never fails if background assets cannot be loaded.
 - **Legacy Route Consolidation**:
   - Legacy routes (`/families`, `/route`, `/songs`, `/location`, `/share`, `/admin/dashboard`) automatically redirect to canonical `/[churchSlug]/...` routes when user has an active church.
   - Shared cards (`FamilyCard`, `RouteCard`, `SongCard`) accept optional `churchSlug` and generate slug-prefixed links.

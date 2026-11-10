@@ -1,16 +1,17 @@
 /**
- * Let's Carol — Share Card & QR Generator
+ * Let's Carol — Festive Share Card & QR Generator
  *
- * Deterministic client-side card image generator for the public Carol Live page:
- * - High-contrast, church-friendly, low-cognitive-load design (accessible for ages 14–70)
- * - Large QR code pointing strictly to canonical public URL:
- *   https://[canonical-domain]/[churchSlug]/live/[groupSlug]
- * - Formatted share message text
- * - Produces actual PNG File, Blob, and data URL for native sharing & downloads
- * - Fully deterministic canvas rendering (zero DOM/screenshot dependencies)
+ * Client-side card image generator using the official Let's Carol Christmas template:
+ * - High-contrast, church-friendly, festive design (accessible for ages 14–70)
+ * - Large scannable QR code centered on the acrylic frame
+ * - Canonical public URL: https://[domain]/[churchSlug]/live/[groupSlug]
+ * - Formatted share message text for WhatsApp, SMS, and native sharing
+ * - Produces PNG File, Blob, and data URL for native sharing & downloads
+ * - Fully deterministic canvas rendering with embedded base64 template
  */
 
 import QRCode from 'qrcode';
+import { SHARE_CARD_TEMPLATE_DATA_URL } from './share-card-asset';
 
 export interface ShareCardOptions {
   churchName: string;
@@ -31,7 +32,7 @@ export interface ShareCardResult {
 
 /**
  * Validates and constructs the canonical public tracking URL.
- * NEVER uses localhost in production; prefers configured NEXT_PUBLIC_APP_URL.
+ * NEVER uses localhost in production or on remote deployments (e.g. Vercel).
  */
 export function getCanonicalLiveUrl(churchSlug: string, groupSlug: string): string {
   const cleanChurchSlug = churchSlug.trim().toLowerCase();
@@ -39,12 +40,24 @@ export function getCanonicalLiveUrl(churchSlug: string, groupSlug: string): stri
 
   let base = process.env.NEXT_PUBLIC_APP_URL?.trim();
 
-  if (!base) {
-    if (typeof window !== 'undefined' && window.location?.origin) {
+  // If running in browser and origin is remote (e.g. carolapp.vercel.app),
+  // NEVER use localhost even if NEXT_PUBLIC_APP_URL was set to localhost during local development!
+  if (typeof window !== 'undefined' && window.location?.origin) {
+    const isBrowserRemote =
+      !window.location.hostname.includes('localhost') &&
+      !window.location.hostname.includes('127.0.0.1');
+
+    if (isBrowserRemote) {
+      if (!base || base.includes('localhost') || base.includes('127.0.0.1')) {
+        base = window.location.origin;
+      }
+    } else if (!base) {
       base = window.location.origin;
-    } else {
-      base = 'https://letscarol.app';
     }
+  }
+
+  if (!base || (base.includes('localhost') && typeof window === 'undefined')) {
+    base = base || 'https://letscarol.app';
   }
 
   // Strip trailing slashes
@@ -71,8 +84,73 @@ export function buildShareMessage(churchName: string, canonicalUrl: string): str
 }
 
 /**
+ * Loads the festive background template image reliably.
+ * Tries the static asset first; falls back instantly to embedded data URL.
+ */
+async function loadTemplateImage(): Promise<HTMLImageElement> {
+  // 1. Try static asset first
+  try {
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const el = new Image();
+      el.onload = () => resolve(el);
+      el.onerror = () => reject(new Error('Failed static image load'));
+      el.src = '/share-card-template.jpg';
+      setTimeout(() => reject(new Error('Static image timeout')), 1500);
+    });
+    return img;
+  } catch {
+    // 2. Guaranteed instant embedded base64 template
+    return new Promise<HTMLImageElement>((resolve, reject) => {
+      const el = new Image();
+      el.onload = () => resolve(el);
+      el.onerror = () => reject(new Error('Failed embedded image load'));
+      el.src = SHARE_CARD_TEMPLATE_DATA_URL;
+    });
+  }
+}
+
+/**
+ * Helper to render text fitted to a maximum width.
+ */
+function drawFittedText(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  centerX: number,
+  centerY: number,
+  baseSize: number,
+  fontFamily: string,
+  maxWidth: number,
+  fillColor: string,
+  shadowColor?: string
+) {
+  let size = baseSize;
+  ctx.font = `italic bold ${size}px ${fontFamily}`;
+  while (ctx.measureText(text).width > maxWidth && size > 16) {
+    size -= 2;
+    ctx.font = `italic bold ${size}px ${fontFamily}`;
+  }
+
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+
+  if (shadowColor) {
+    ctx.fillStyle = shadowColor;
+    ctx.fillText(text, centerX + 1.5, centerY + 1.5);
+  }
+
+  ctx.fillStyle = fillColor;
+  ctx.fillText(text, centerX, centerY);
+}
+
+/**
  * Deterministically generates the Share Card image on an offscreen HTML5 canvas.
- * Dimensions: 1080 x 1400 (ideal for WhatsApp, mobile sharing, and printing).
+ * Uses the Christmas acrylic template (682 x 1024), drawing:
+ * - Dynamic Church Name (top)
+ * - Ribbon title: "Follow the Carol Team Live"
+ * - Dynamic QR Code (centered in white/gold frame)
+ * - Canonical public tracking URL (in bottom pill)
+ * - "Let's Carol" branding (wood base)
+ * (Omits "Scan with your phone camera" text per design requirement)
  */
 export async function generateShareCard(options: ShareCardOptions): Promise<ShareCardResult> {
   const { churchName, teamName, churchSlug, groupSlug } = options;
@@ -81,8 +159,8 @@ export async function generateShareCard(options: ShareCardOptions): Promise<Shar
 
   // 1. Generate QR Code as a data URL (High Error Correction 'M')
   const qrDataUrl = await QRCode.toDataURL(canonicalUrl, {
-    width: 600,
-    margin: 2,
+    width: 500,
+    margin: 1,
     errorCorrectionLevel: 'M',
     color: {
       dark: '#0F172A', // Slate 900
@@ -90,22 +168,24 @@ export async function generateShareCard(options: ShareCardOptions): Promise<Shar
     },
   });
 
-  // Convert QR data URL to a standalone Blob for "Download QR Only"
+  // Standalone QR Blob for "Download QR Only"
   const qrRes = await fetch(qrDataUrl);
   const qrBlob = await qrRes.blob();
 
-  // 2. Load QR Image for drawing onto Canvas
+  // Load QR image element
   const qrImg = await new Promise<HTMLImageElement>((resolve, reject) => {
     const img = new Image();
-    img.crossOrigin = 'anonymous';
     img.onload = () => resolve(img);
     img.onerror = e => reject(e);
     img.src = qrDataUrl;
   });
 
+  // 2. Load festive background template image (static with embedded base64 fallback)
+  const templateImg = await loadTemplateImage();
+
   // 3. Create Offscreen Canvas
-  const width = 1080;
-  const height = 1400;
+  const width = 682;
+  const height = 1024;
   const canvas = document.createElement('canvas');
   canvas.width = width;
   canvas.height = height;
@@ -115,128 +195,82 @@ export async function generateShareCard(options: ShareCardOptions): Promise<Shar
     throw new Error('Canvas 2D context is not available');
   }
 
-  // --- Background ---
-  ctx.fillStyle = '#FFFFFF';
-  ctx.fillRect(0, 0, width, height);
+  // --- DRAW TEMPLATE ---
+  ctx.drawImage(templateImg, 0, 0, width, height);
 
-  // Outer border
-  ctx.strokeStyle = '#E2E8F0'; // Slate 200
-  ctx.lineWidth = 4;
-  ctx.strokeRect(16, 16, width - 32, height - 32);
+  // Dynamic Church Name (Y=182, below Nativity scene)
+  const hasTeam = Boolean(teamName && teamName.trim() && teamName.trim() !== churchName);
+  const churchY = hasTeam ? 172 : 185;
 
-  // Top festive green bar
-  ctx.fillStyle = '#166534'; // Forest green
-  ctx.fillRect(16, 16, width - 32, 28);
+  drawFittedText(
+    ctx,
+    churchName,
+    350,
+    churchY,
+    32,
+    '"Playfair Display", Georgia, "Times New Roman", serif',
+    350,
+    '#FFFDF0',
+    'rgba(2, 18, 48, 0.85)'
+  );
 
-  // --- Text Helper ---
-  function drawCenteredText(text: string, y: number, font: string, color: string, maxWidth = 960) {
-    ctx!.font = font;
-    ctx!.fillStyle = color;
-    ctx!.textAlign = 'center';
-    ctx!.textBaseline = 'middle';
-
-    // Ellipsis truncation if too long
-    let displayText = text;
-    if (ctx!.measureText(displayText).width > maxWidth) {
-      while (displayText.length > 4 && ctx!.measureText(displayText + '…').width > maxWidth) {
-        displayText = displayText.slice(0, -1);
-      }
-      displayText += '…';
-    }
-
-    ctx!.fillText(displayText, width / 2, y);
+  // Optional Team Name
+  if (hasTeam) {
+    drawFittedText(
+      ctx,
+      teamName!.trim(),
+      350,
+      212,
+      18,
+      'Georgia, serif',
+      300,
+      '#FDE68A',
+      'rgba(2, 18, 48, 0.75)'
+    );
   }
 
-  // --- Church Name ---
-  drawCenteredText(churchName, 130, 'bold 46px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif', '#14532D');
+  // Festive Ribbon Heading (Y=295)
+  ctx.font = 'italic 600 20px "Playfair Display", Georgia, serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = 'rgba(50, 0, 0, 0.7)';
+  ctx.fillText('Follow the Carol Team Live', 351, 296);
+  ctx.fillStyle = '#FFFDF0';
+  ctx.fillText('Follow the Carol Team Live', 350, 295);
 
-  // --- Optional Team Name ---
-  if (teamName && teamName.trim()) {
-    drawCenteredText(teamName.trim(), 195, '600 30px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif', '#475569');
-  }
+  // QR Code: Centered in white/gold acrylic box (Center X=350, Y=517, Size=260)
+  const qrSize = 260;
+  const qrX = Math.round(350 - qrSize / 2);
+  const qrY = Math.round(517 - qrSize / 2);
+  ctx.drawImage(qrImg, qrX, qrY, qrSize, qrSize);
 
-  // Subtle separator line
-  ctx.strokeStyle = '#F1F5F9';
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(140, 245);
-  ctx.lineTo(width - 140, 245);
-  ctx.stroke();
+  // Subtitle on frosted glass (Y=728) - "Scan with your phone camera" omitted as requested
+  ctx.font = 'italic 500 13px Georgia, serif';
+  ctx.fillStyle = '#6B4A2D';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('Live location  •  Carol songs', 350, 728);
 
-  // --- Main Heading ---
-  drawCenteredText(
-    'Follow the Carol Team Live',
-    305,
-    'bold 46px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-    '#0F172A'
-  );
-
-  // --- Large QR Code Box ---
-  const qrBoxSize = 580;
-  const qrBoxX = (width - qrBoxSize) / 2;
-  const qrBoxY = 375;
-
-  // QR background panel with subtle rounded border
-  ctx.fillStyle = '#F8FAFC';
-  ctx.beginPath();
-  ctx.roundRect(qrBoxX - 16, qrBoxY - 16, qrBoxSize + 32, qrBoxSize + 32, 28);
-  ctx.fill();
-
-  ctx.strokeStyle = '#CBD5E1'; // Slate 300
-  ctx.lineWidth = 3;
-  ctx.stroke();
-
-  // Draw QR Code
-  ctx.drawImage(qrImg, qrBoxX, qrBoxY, qrBoxSize, qrBoxSize);
-
-  // --- Clear Instructions ---
-  drawCenteredText(
-    'Scan with your phone camera',
-    1045,
-    'bold 38px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-    '#1E293B'
-  );
-
-  // Subtitle / features
-  drawCenteredText(
-    'Live location • Carol songs',
-    1110,
-    '500 28px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-    '#64748B'
-  );
-
-  // --- Canonical Link Preview Pill ---
-  const pillY = 1195;
-  const pillH = 76;
-  const pillW = 860;
-  const pillX = (width - pillW) / 2;
-
-  ctx.fillStyle = '#F0FDF4'; // Mint green
-  ctx.beginPath();
-  ctx.roundRect(pillX, pillY, pillW, pillH, 38);
-  ctx.fill();
-
-  ctx.strokeStyle = '#86EFAC'; // Light green border
-  ctx.lineWidth = 2;
-  ctx.stroke();
-
-  // URL Display text
+  // Canonical URL inside bottom pill (Y=796, Center X=361)
   const displayUrl = canonicalUrl.replace(/^https?:\/\//, '');
-  drawCenteredText(
-    displayUrl,
-    pillY + pillH / 2,
-    'bold 26px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-    '#166534',
-    800
-  );
+  ctx.font = 'bold 12px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace';
+  ctx.fillStyle = '#1E293B';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
 
-  // --- Footer Brand ---
-  drawCenteredText(
-    'Let’s Carol',
-    1340,
-    '600 24px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-    '#94A3B8'
-  );
+  let urlText = displayUrl;
+  while (ctx.measureText(urlText).width > 280 && urlText.length > 10) {
+    urlText = urlText.slice(0, -1);
+  }
+  if (urlText !== displayUrl) urlText += '…';
+  ctx.fillText(urlText, 361, 796);
+
+  // "Let's Carol" script branding on wood base (Y=890)
+  ctx.font = 'italic bold 26px "Playfair Display", Georgia, cursive, serif';
+  ctx.fillStyle = 'rgba(20, 10, 0, 0.75)';
+  ctx.fillText("Let's Carol", 351, 891);
+  ctx.fillStyle = '#E8C582';
+  ctx.fillText("Let's Carol", 350, 890);
 
   // 4. Export to Blob and File
   const cardDataUrl = canvas.toDataURL('image/png');
@@ -261,4 +295,3 @@ export async function generateShareCard(options: ShareCardOptions): Promise<Shar
     shareText,
   };
 }
-

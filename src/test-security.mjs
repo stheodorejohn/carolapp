@@ -511,8 +511,27 @@ assert(reservedSlugCreationBlocked === true, 'Reserved route slug is rejected in
 // ── Test 14: Canonical Public URL & Share Message Formatting ──
 console.log('\n--- Test 14: Canonical Public URL & Share Message ---');
 
-function getCanonicalLiveUrl(churchSlug, groupSlug, envBase) {
-  let base = envBase || 'https://letscarol.app';
+function getCanonicalLiveUrl(churchSlug, groupSlug, envBase, mockWindow) {
+  let base = envBase?.trim();
+
+  if (mockWindow?.location?.origin) {
+    const isBrowserRemote =
+      !mockWindow.location.hostname.includes('localhost') &&
+      !mockWindow.location.hostname.includes('127.0.0.1');
+
+    if (isBrowserRemote) {
+      if (!base || base.includes('localhost') || base.includes('127.0.0.1')) {
+        base = mockWindow.location.origin;
+      }
+    } else if (!base) {
+      base = mockWindow.location.origin;
+    }
+  }
+
+  if (!base || (base.includes('localhost') && !mockWindow)) {
+    base = base || 'https://letscarol.app';
+  }
+
   base = base.replace(/\/+$/, '');
   return `${base}/${churchSlug.toLowerCase().trim()}/live/${groupSlug.toLowerCase().trim()}`;
 }
@@ -534,6 +553,14 @@ function buildShareMessage(churchName, canonicalUrl) {
 const canonicalUrl = getCanonicalLiveUrl('gcc', 'team-alpha', 'https://letscarol.app');
 assert(canonicalUrl === 'https://letscarol.app/gcc/live/team-alpha',
   'Canonical URL formatted strictly as https://domain/churchSlug/live/groupSlug');
+
+// Remote Vercel origin overrides localhost env setting
+const vercelUrl = getCanonicalLiveUrl('emmanuel-carol', 'a2', 'http://localhost:3000', {
+  location: { hostname: 'carolapp.vercel.app', origin: 'https://carolapp.vercel.app' }
+});
+assert(vercelUrl === 'https://carolapp.vercel.app/emmanuel-carol/live/a2',
+  'Remote Vercel deployment automatically overrides localhost:3000 in canonical URL');
+
 
 const shareMsg = buildShareMessage('Grace Community Church', canonicalUrl);
 assert(shareMsg.includes('🎶 Follow our Carol Team Live'), 'Share message contains headline');

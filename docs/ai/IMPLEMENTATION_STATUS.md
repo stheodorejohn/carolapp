@@ -33,8 +33,9 @@
     - Implemented `syncSessionCookie` in `auth-context.tsx` synchronizing access token to `sb-access-token` secure cookie on sign-in and clearing on sign-out.
     - Server invite API routes support both Bearer authorization headers and session cookies.
   - **Deterministic QR Share Card & Native Sharing (`src/lib/share-card.ts`, `src/app/share/page.tsx`):**
-    - Created `src/lib/share-card.ts` using `qrcode` and HTML5 offscreen canvas to generate 1080x1400 crisp, church-friendly share cards with zero DOM screenshot dependencies.
-    - Card includes Church Name, Team Name, Heading ("Follow the Carol Team Live"), large QR code (560px), clear instruction ("Scan with your phone camera"), and subtitle ("Live location • Carol songs").
+    - Created `src/lib/share-card.ts` using `qrcode` and HTML5 offscreen canvas with the authentic Let's Carol Christmas acrylic template (`public/share-card-template.jpg`, 682x1024).
+    - Card dynamically composites: Church Name (warm ivory serif), Team Name, Ribbon title ("Follow the Carol Team Live"), large scannable QR code (260x260, centered in golden acrylic frame), feature subtitle ("Live location • Carol songs"), bottom URL capsule, and gold script branding ("Let's Carol").
+    - **Omitted "Scan with your phone camera" text and phone icon per user design directive**, keeping the frosted acrylic pane clean, spacious, and uncluttered.
     - QR code points strictly to canonical URL `https://[domain]/[churchSlug]/live/[groupSlug]`.
     - Native Web Share integration with file attachments (`navigator.canShare({ files: [cardFile] })`), formatted message text, and fallback Copy Link, Download Card, Download QR buttons.
     - Designed with low cognitive load for ages 14–70.

@@ -664,3 +664,33 @@ Strengthens Next.js server security posture while maintaining smooth client-side
 - `src/app/families/page.tsx`, `src/app/route/page.tsx`, `src/app/songs/page.tsx`, `src/app/location/page.tsx`, `src/app/share/page.tsx`, `src/app/admin/dashboard/page.tsx`
 
 **Status:** Implemented
+
+---
+
+## D-030 — Festive Christmas Acrylic Template for QR Share Cards
+
+**Date:** 2026-11-10
+
+**Decision:**  
+Adopted the official festive Christmas acrylic template (`public/share-card-template.jpg`, 682x1024) for the live tracking QR share card:
+1. Renders the authentic Christmas aesthetic (Nativity silhouette in glowing barn, decorated Christmas trees, red festive ribbon, acrylic stand with gold border, snow-draped lantern, and gifts).
+2. Canvas composites dynamic church data deterministically:
+   - Church Name & optional Team Name rendered below Nativity in glowing ivory serif (`"Playfair Display", Georgia, serif`).
+   - Red ribbon features `"Follow the Carol Team Live"`.
+   - Large dynamic QR code (260x260, error correction 'M') centered cleanly in the inner acrylic card box (X: 190 to 509, Y: 365 to 669).
+   - **Omitted `"Scan with your phone camera"` text and phone icon per user design directive**, keeping the frosted acrylic pane clean, spacious, and uncluttered.
+   - Feature tagline `"Live location • Carol songs"` rendered in warm amber serif below the QR code.
+   - Canonical public tracking URL formatted cleanly inside the bottom rounded capsule.
+   - Wooden base bears elegant gold script branding `"Let's Carol"`.
+3. Built-in procedural rendering fallback ensures image generation never fails if image assets are unavailable.
+
+**Reason:**  
+Aligns the PWA share card with the user-provided festive Christmas visual identity while respecting the requirement to omit "Scan with your phone camera" text.
+
+**Affected areas:**
+- `src/lib/share-card.ts`
+- `src/app/share/page.tsx`
+- `public/share-card-template.jpg`
+
+**Status:** Implemented
+
