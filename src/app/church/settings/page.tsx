@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { supabase } from '@/lib/supabase';
+import { validateSlug, normalizeSlug } from '@/lib/slug';
 import type { ChurchMember, ChurchRole } from '@/types/database';
 
 interface InviteItem {
@@ -44,9 +45,14 @@ export default function ChurchSettingsPage() {
 
   // ── Church Details State ──
   const [churchName, setChurchName] = useState(currentChurch?.name ?? '');
+  const [churchSlug, setChurchSlug] = useState(currentChurch?.slug ?? '');
   const [savingChurch, setSavingChurch] = useState(false);
   const [churchSuccess, setChurchSuccess] = useState('');
   const [churchError, setChurchError] = useState('');
+  const [checkingSlug, setCheckingSlug] = useState(false);
+  const [slugStatus, setSlugStatus] = useState<'idle' | 'checking' | 'available' | 'unavailable' | 'invalid'>('idle');
+  const [slugFeedback, setSlugFeedback] = useState('');
+  const [showSlugConfirm, setShowSlugConfirm] = useState(false);
 
   // ── Members State ──
   const [members, setMembers] = useState<MemberWithUser[]>([]);
@@ -74,7 +80,10 @@ export default function ChurchSettingsPage() {
     if (currentChurch?.name) {
       setChurchName(currentChurch.name);
     }
-  }, [currentChurch?.name]);
+    if (currentChurch?.slug) {
+      setChurchSlug(currentChurch.slug);
+    }
+  }, [currentChurch?.name, currentChurch?.slug]);
 
   // Load Members
   const loadMembers = useCallback(async () => {
@@ -141,35 +150,159 @@ export default function ChurchSettingsPage() {
     loadInvites();
   }, [loadMembers, loadInvites]);
 
-  // Update Church Name
-  async function handleUpdateChurch(e: React.FormEvent) {
+  // Debounced slug check for settings
+  const handleSlugInputChange = (val: string) => {
+    const clean = normalizeSlug(val);
+    setChurchSlug(clean);
+    setChurchError('');
+    setChurchSuccess('');
+
+    if (clean === currentChurch?.slug) {
+      setSlugStatus('idle');
+      setSlugFeedback('');
+      setCheckingSlug(false);
+      return;
+    }
+
+    if (!clean || clean.length < 3) {
+      setSlugStatus('invalid');
+      setSlugFeedback('Church URL must be at least 3 characters.');
+      setCheckingSlug(false);
+      return;
+    }
+
+    const validation = validateSlug(clean);
+    if (!validation.valid) {
+      setSlugStatus('invalid');
+      setSlugFeedback(validation.error ?? 'Invalid URL format');
+      setCheckingSlug(false);
+      return;
+    }
+
+    setCheckingSlug(true);
+    setSlugStatus('checking');
+
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(
+          `/api/churches/check-slug?slug=${encodeURIComponent(clean)}&excludeChurchId=${currentChurch?.id ?? ''}`
+        );
+        const data = await res.json();
+        if (data.available) {
+          setSlugStatus('available');
+          setSlugFeedback(`${clean} is available`);
+        } else {
+          setSlugStatus('unavailable');
+          setSlugFeedback(data.reason ?? 'This church URL is already in use.');
+        }
+      } catch {
+        setSlugStatus('idle');
+        setSlugFeedback('');
+      } finally {
+        setCheckingSlug(false);
+      }
+    }, 400);
+
+    return () => clearTimeout(timer);
+  };
+
+  // Perform actual church details saving
+  async function performChurchUpdate() {
+    if (!currentChurch?.id) return;
+    const trimmed = churchName.trim();
+    const cleanSlug = normalizeSlug(churchSlug);
+
+    setSavingChurch(true);
+    setChurchError('');
+    setChurchSuccess('');
+    setShowSlugConfirm(false);
+
+    try {
+      // 1. If slug changed, try change_church_slug RPC or history table
+      if (cleanSlug && cleanSlug !== currentChurch.slug) {
+        try {
+          const { error: rpcErr } = await supabase.rpc('change_church_slug', {
+            target_church_id: currentChurch.id,
+            new_slug: cleanSlug,
+          });
+          if (rpcErr) throw rpcErr;
+        } catch {
+          // Direct fallback: record old slug in history, update churches.slug
+          if (currentChurch.slug) {
+            await supabase.from('church_slug_history').insert({
+              church_id: currentChurch.id,
+              slug: currentChurch.slug,
+            });
+          }
+          const { error: slugErr } = await supabase
+            .from('churches')
+            .update({ slug: cleanSlug })
+            .eq('id', currentChurch.id);
+          if (slugErr) throw slugErr;
+        }
+      }
+
+      // 2. Update church name
+      if (trimmed !== currentChurch.name) {
+        const { error: nameErr } = await supabase
+          .from('churches')
+          .update({ name: trimmed })
+          .eq('id', currentChurch.id);
+        if (nameErr) throw nameErr;
+      }
+
+      setChurchSuccess('Church details updated successfully.');
+      setSlugStatus('idle');
+      setSlugFeedback('');
+      await refreshChurch();
+    } catch (err: unknown) {
+      console.error('[ChurchSettings] update error:', err);
+      const msg = err instanceof Error ? err.message : '';
+      if (msg.includes('unique') || msg.includes('already in use')) {
+        setChurchError('This church URL is already in use by another church.');
+      } else {
+        setChurchError('Failed to update church details. You must be an administrator.');
+      }
+    } finally {
+      setSavingChurch(false);
+    }
+  }
+
+  // Form submit handler with confirmation for slug changes
+  function handleUpdateChurch(e: React.FormEvent) {
     e.preventDefault();
     if (!currentChurch?.id) return;
+
     const trimmed = churchName.trim();
     if (!trimmed) {
       setChurchError('Church name cannot be empty.');
       return;
     }
 
-    setSavingChurch(true);
-    setChurchError('');
-    setChurchSuccess('');
-
-    try {
-      const { error } = await supabase
-        .from('churches')
-        .update({ name: trimmed })
-        .eq('id', currentChurch.id);
-
-      if (error) throw error;
-      setChurchSuccess('Church details updated successfully.');
-      await refreshChurch();
-    } catch (err: unknown) {
-      console.error('[ChurchSettings] update error:', err);
-      setChurchError('Failed to update church details. You must be an administrator.');
-    } finally {
-      setSavingChurch(false);
+    const cleanSlug = normalizeSlug(churchSlug);
+    if (!cleanSlug) {
+      setChurchError('Church URL cannot be empty.');
+      return;
     }
+
+    const validation = validateSlug(cleanSlug);
+    if (!validation.valid) {
+      setChurchError(validation.error ?? 'Please provide a valid church URL.');
+      return;
+    }
+
+    if (slugStatus === 'unavailable') {
+      setChurchError('This church URL is already in use. Please choose another.');
+      return;
+    }
+
+    // If slug is changing, require confirmation
+    if (cleanSlug !== currentChurch.slug) {
+      setShowSlugConfirm(true);
+      return;
+    }
+
+    performChurchUpdate();
   }
 
   // Change Member Role
@@ -700,10 +833,74 @@ export default function ChurchSettingsPage() {
                 </p>
               </div>
 
+              {/* Church URL Identifier / Slug Field */}
+              <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200/80 space-y-2">
+                <div className="flex items-center justify-between">
+                  <label htmlFor="church-slug-edit" className="block text-xs font-bold text-slate-700">
+                    Church URL Identifier
+                  </label>
+                  <span className="text-[11px] text-slate-400">Short &amp; memorable</span>
+                </div>
+
+                <div className="flex items-center rounded-xl bg-white border border-slate-200 overflow-hidden focus-within:border-green-600 focus-within:ring-2 focus-within:ring-green-100">
+                  <span className="pl-3 pr-1 text-xs text-slate-400 select-none font-mono">
+                    /
+                  </span>
+                  <input
+                    id="church-slug-edit"
+                    type="text"
+                    value={churchSlug}
+                    onChange={e => handleSlugInputChange(e.target.value)}
+                    disabled={!isAdmin || savingChurch}
+                    placeholder="e.g. smc"
+                    className="w-full py-2.5 pr-3 text-xs font-mono font-medium text-slate-800 bg-transparent outline-none"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck="false"
+                  />
+                  {checkingSlug && (
+                    <span className="pr-3 text-slate-400">
+                      <RefreshCw size={13} className="animate-spin" />
+                    </span>
+                  )}
+                </div>
+
+                {/* Slug Real-Time Feedback */}
+                {slugFeedback && (
+                  <div className="text-[11px] flex items-center gap-1.5 pt-0.5">
+                    {slugStatus === 'available' && (
+                      <span className="text-green-700 font-medium flex items-center gap-1">
+                        <Check size={12} className="stroke-[3]" />
+                        <span>✓ {slugFeedback}</span>
+                      </span>
+                    )}
+                    {(slugStatus === 'unavailable' || slugStatus === 'invalid') && (
+                      <span className="text-red-600 font-medium flex items-center gap-1">
+                        <AlertCircle size={12} />
+                        <span>{slugFeedback}</span>
+                      </span>
+                    )}
+                    {slugStatus === 'checking' && (
+                      <span className="text-slate-500">Checking URL availability…</span>
+                    )}
+                  </div>
+                )}
+
+                <p className="text-[11px] text-slate-400 leading-tight">
+                  Public routes like <code>/{churchSlug || 'url'}/home</code> and <code>/{churchSlug || 'url'}/live</code> use this identifier.
+                </p>
+              </div>
+
               {isAdmin && (
                 <button
                   type="submit"
-                  disabled={savingChurch || churchName.trim() === currentChurch?.name}
+                  disabled={
+                    savingChurch ||
+                    checkingSlug ||
+                    slugStatus === 'unavailable' ||
+                    slugStatus === 'invalid' ||
+                    (churchName.trim() === currentChurch?.name && churchSlug === currentChurch?.slug)
+                  }
                   className="btn-primary w-full py-3.5 text-xs font-bold rounded-xl shadow-sm disabled:opacity-50"
                 >
                   {savingChurch ? 'Saving Changes…' : 'Save Church Details'}
@@ -713,6 +910,49 @@ export default function ChurchSettingsPage() {
           </div>
         )}
       </div>
+
+      {/* ── Slug Change Confirmation Modal ── */}
+      {showSlugConfirm && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="w-full max-w-sm bg-white rounded-3xl p-6 shadow-2xl space-y-4 animate-scale-up">
+            <div className="flex items-center gap-2.5 text-amber-600">
+              <span className="p-2 rounded-xl bg-amber-50">
+                <AlertCircle size={20} />
+              </span>
+              <h3 className="font-bold text-slate-800 text-base">Change Church URL?</h3>
+            </div>
+
+            <p className="text-xs text-slate-600 leading-relaxed">
+              You are changing this church URL from{' '}
+              <strong className="font-mono text-slate-800">/{currentChurch?.slug}</strong> to{' '}
+              <strong className="font-mono text-green-700">/{churchSlug}</strong>.
+            </p>
+
+            <div className="bg-amber-50 border border-amber-200/60 p-3 rounded-2xl text-[11px] text-amber-800 space-y-1">
+              <p className="font-semibold">Important note:</p>
+              <p>Previously shared links will continue redirecting automatically, but we recommend sharing the new URL with your team.</p>
+            </div>
+
+            <div className="flex items-center gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowSlugConfirm(false)}
+                className="btn-outline flex-1 py-3 text-xs font-semibold rounded-xl"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => performChurchUpdate()}
+                disabled={savingChurch}
+                className="btn-primary flex-1 py-3 text-xs font-bold rounded-xl"
+              >
+                {savingChurch ? 'Updating…' : 'Continue'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Role Change Modal ── */}
       {editingMember && (

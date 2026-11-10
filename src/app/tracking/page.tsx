@@ -4,30 +4,43 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/lib/auth-context';
 import { TreePine, Users, Plus } from 'lucide-react';
 
 export default function TrackingIndexPage() {
   const router = useRouter();
+  const { currentChurch } = useAuth();
   const [noGroup, setNoGroup] = useState(false);
 
   useEffect(() => {
     async function redirect() {
-      const { data } = await supabase
+      let query = supabase
         .from('groups')
-        .select('id')
-        .eq('is_active', true)
+        .select('id, slug')
+        .eq('is_active', true);
+
+      if (currentChurch?.id) {
+        query = query.eq('church_id', currentChurch.id);
+      }
+
+      const { data } = await query
         .order('created_at', { ascending: true })
         .limit(1)
         .maybeSingle();
 
       if (data?.id) {
-        router.replace(`/tracking/${data.id}`);
+        const target = data.slug || data.id;
+        if (currentChurch?.slug) {
+          router.replace(`/${currentChurch.slug}/tracking/${target}`);
+        } else {
+          router.replace(`/tracking/${target}`);
+        }
       } else {
         setNoGroup(true);
       }
     }
     redirect();
-  }, [router]);
+  }, [currentChurch?.id, currentChurch?.slug, router]);
 
   if (!noGroup) {
     return (

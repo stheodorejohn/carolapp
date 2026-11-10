@@ -174,7 +174,10 @@ Open policies (`using (true)`) are completely removed. Access is strictly scoped
 - Timestamps: `arrived_at`, `checked_in_at`, `checked_out_at`
 
 **Song** — Carol songs for the event
-- `id`, `title`, `artist`, `lyrics`, `youtube_url`, `category`, `order_index`
+- `id`, `church_id`, `title`, `artist`, `lyrics`, `youtube_url`, `category`, `order_index`, `is_hidden`, `is_public`, `updated_by`
+
+**Church Slug History** — URL history for backward-compatible redirects
+- `id`, `church_id`, `slug`, `created_at`
 
 ---
 

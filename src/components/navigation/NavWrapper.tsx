@@ -23,7 +23,8 @@ function NavWrapperInner() {
     pathname === '/live' ||
     pathname.startsWith('/live/') ||
     pathname === '/join' ||
-    pathname.startsWith('/join/')
+    pathname.startsWith('/join/') ||
+    /^\/[^/]+\/live(?:\/.*)?$/.test(pathname)
   ) {
     return null;
   }

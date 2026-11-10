@@ -73,10 +73,24 @@ create table if not exists public.churches (
   updated_at  timestamptz not null default now()
 );
 
+-- Case-insensitive unique index on churches.slug
+create unique index if not exists idx_churches_slug_unique on public.churches (lower(slug));
+
 drop trigger if exists churches_updated_at on public.churches;
 create trigger churches_updated_at
   before update on public.churches
   for each row execute procedure public.set_updated_at();
+
+-- ─── CHURCH SLUG HISTORY (For URL redirects on slug change) ────────────────────
+create table if not exists public.church_slug_history (
+  id          uuid primary key default gen_random_uuid(),
+  church_id   uuid not null references public.churches(id) on delete cascade,
+  slug        text not null,
+  created_at  timestamptz not null default now()
+);
+
+create index if not exists idx_church_slug_history_slug
+  on public.church_slug_history(lower(slug));
 
 
 -- ─── CHURCH MEMBERS ───────────────────────────────────────────────────────────
@@ -228,9 +242,15 @@ create table if not exists public.songs (
   youtube_url text,
   category    text,
   order_index integer not null default 0,
+  is_hidden   boolean not null default false,
+  is_public   boolean not null default true,
+  updated_by  uuid references auth.users(id) on delete set null,
   created_at  timestamptz not null default now(),
   updated_at  timestamptz not null default now()
 );
+
+create index if not exists idx_songs_church_visibility
+  on public.songs(church_id, is_hidden, is_public);
 
 drop trigger if exists songs_updated_at on public.songs;
 create trigger songs_updated_at
@@ -542,11 +562,29 @@ create policy "Members can update stop status"
   on public.routes for update to authenticated using (public.is_church_member(church_id)) with check (public.is_church_member(church_id));
 
 -- Songs
-create policy "Members can view church songs"
-  on public.songs for select to authenticated using (public.is_church_member(church_id));
+drop policy if exists "Members can view church songs" on public.songs;
+create policy "Members can view active church songs"
+  on public.songs for select to authenticated
+  using (
+    public.is_church_member(church_id) and (
+      is_hidden = false or public.is_church_admin(church_id)
+    )
+  );
 
 create policy "Admins can manage church songs"
-  on public.songs for all to authenticated using (public.is_church_admin(church_id)) with check (public.is_church_admin(church_id));
+  on public.songs for all to authenticated
+  using (public.is_church_admin(church_id))
+  with check (public.is_church_admin(church_id));
+
+create policy "Public can view active public songs for live"
+  on public.songs for select to anon
+  using (is_hidden = false and is_public = true);
+
+-- Public church slug resolution
+drop policy if exists "Public can resolve church slug" on public.churches;
+create policy "Public can resolve church slug"
+  on public.churches for select to anon, authenticated
+  using (slug is not null);
 
 
 -- ─── REALTIME ─────────────────────────────────────────────────────────────────

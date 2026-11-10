@@ -28,29 +28,34 @@ All routes use the App Router (`src/app/` directory).
 
 | Route | File | Description | Auth Required |
 |-------|------|-------------|---------------|
-| `/` | `app/page.tsx` | Home / Today screen (scoped to active church) | Authenticated |
+| `/` | `app/page.tsx` | Home / Today screen (redirects to `/[slug]/home`) | Authenticated |
+| `/[churchSlug]/home` | `app/[churchSlug]/home/page.tsx` | Today screen scoped to church | Authenticated |
+| `/[churchSlug]/families` | `app/[churchSlug]/families/page.tsx` | Family list & search | Authenticated |
+| `/[churchSlug]/families/new` | `app/[churchSlug]/families/new/page.tsx` | Add family wizard | Authenticated |
+| `/[churchSlug]/families/[familyId]` | `app/[churchSlug]/families/[familyId]/page.tsx` | Family detail | Authenticated |
+| `/[churchSlug]/route` | `app/[churchSlug]/route/page.tsx` | Route stops list | Authenticated |
+| `/[churchSlug]/route/[stopId]` | `app/[churchSlug]/route/[stopId]/page.tsx` | Stop detail / visit flow | Authenticated |
+| `/[churchSlug]/songs` | `app/[churchSlug]/songs/page.tsx` | Church songbook (Admin controls or Member view) | Authenticated |
+| `/[churchSlug]/songs/new` | `app/[churchSlug]/songs/new/page.tsx` | Admin: Add new song | Authenticated (Admin) |
+| `/[churchSlug]/songs/[songId]` | `app/[churchSlug]/songs/[songId]/page.tsx` | Song lyrics detail | Authenticated |
+| `/[churchSlug]/songs/[songId]/edit` | `app/[churchSlug]/songs/[songId]/edit/page.tsx` | Admin: Edit, hide, or delete song | Authenticated (Admin) |
+| `/[churchSlug]/location` | `app/[churchSlug]/location/page.tsx` | Driver GPS broadcast | Authenticated (Driver/Admin) |
+| `/[churchSlug]/share` | `app/[churchSlug]/share/page.tsx` | Congregation tracking share link generator | Authenticated |
+| `/[churchSlug]/tracking` | `app/[churchSlug]/tracking/page.tsx` | Team live map redirect | Authenticated |
+| `/[churchSlug]/tracking/[groupId]` | `app/[churchSlug]/tracking/[groupId]/page.tsx` | Team live tracking map | Authenticated |
+| `/[churchSlug]/admin/dashboard` | `app/[churchSlug]/admin/dashboard/page.tsx` | Admin / More hub | Authenticated |
+| `/[churchSlug]/church/settings` | `app/[churchSlug]/church/settings/page.tsx` | Church slug, name, members & invites | Authenticated (Admin) |
+| `/[churchSlug]/live` | `app/[churchSlug]/live/page.tsx` | Public live entrance | Public |
+| `/[churchSlug]/live/[groupId]` | `app/[churchSlug]/live/[groupId]/page.tsx` | Public Live Tracking & Songs (no silent fallback) | Public |
 | `/login` | `app/login/page.tsx` | Login page with Supabase Auth & invite banner | Public |
 | `/signup` | `app/signup/page.tsx` | Registration with strength meter & church join | Public |
 | `/join/[token]` | `app/join/[token]/page.tsx` | Secure church invitation landing & join screen | Public / Auth |
-| `/church/setup` | `app/church/setup/page.tsx` | Church onboarding & initial admin setup | Authenticated |
-| `/church/settings` | `app/church/settings/page.tsx` | Church info, member management & invite links | Authenticated (Admin) |
+| `/church/setup` | `app/church/setup/page.tsx` | Church onboarding, smart slug suggestion & setup | Authenticated |
+| `/church/settings` | `app/church/settings/page.tsx` | Legacy redirect to church settings | Authenticated (Admin) |
 | `/forgot-password` | `app/forgot-password/page.tsx` | Password reset request | Public |
 | `/reset-password` | `app/reset-password/page.tsx` | Set new password from recovery link | Public / Recovery |
 | `/admin/dashboard` | `app/admin/dashboard/page.tsx` | Central "More" hub & role switcher | Authenticated |
-| `/families` | `app/families/page.tsx` | Family list & search (scoped to church) | Authenticated |
-| `/families/new` | `app/families/new/page.tsx` | Add family (4-step wizard) | Authenticated |
-| `/families/[familyId]` | `app/families/[familyId]/page.tsx` | Family detail & member management | Authenticated |
-| `/route` | `app/route/page.tsx` | Route list & active stop callout | Authenticated |
-| `/route/[stopId]` | `app/route/[stopId]/page.tsx` | Stop detail / visit flow (Arrived/Visit/Complete) | Authenticated |
-| `/tracking` | `app/tracking/page.tsx` | Redirect to active group tracking | Authenticated |
-| `/tracking/[groupId]` | `app/tracking/[groupId]/page.tsx` | Live tracking map | Authenticated |
-| `/location` | `app/location/page.tsx` | GPS sharing & broadcast (driver view) | Authenticated |
-| `/live/[groupId]` | `app/live/[groupId]/page.tsx` | Public congregation view (privacy hardened) | Public |
-| `/share` | `app/share/page.tsx` | Congregation share link & QR | Authenticated |
-| `/songs` | `app/songs/page.tsx` | Carol songbook & lyrics (scoped to church) | Authenticated |
-| `/songs/[songId]` | `app/songs/[songId]/page.tsx` | Song detail & YouTube | Authenticated |
-| `/settings/groups` | `app/settings/groups/page.tsx` | Group management | Admin |
-| `/settings/groups/new` | `app/settings/groups/new/page.tsx` | Create group | Admin |
+| `/api/churches/check-slug` | `app/api/churches/check-slug/route.ts` | Real-time debounced slug availability check | Public |
 | `/api/invites/validate` | `app/api/invites/validate/route.ts` | Validates invite token without exposing secrets | Public |
 | `/api/invites/accept` | `app/api/invites/accept/route.ts` | Accepts invite & creates church membership | Authenticated |
 | `/api/invites/generate` | `app/api/invites/generate/route.ts` | Generates random token & stores token hash | Admin |

@@ -20,7 +20,14 @@ const PUBLIC_PREFIXES = ['/login', '/signup', '/forgot-password', '/reset-passwo
 
 function isPublicRoute(pathname: string | null): boolean {
   if (!pathname) return false;
-  return PUBLIC_PREFIXES.some(prefix => pathname === prefix || pathname.startsWith(prefix + '/'));
+  if (PUBLIC_PREFIXES.some(prefix => pathname === prefix || pathname.startsWith(prefix + '/'))) {
+    return true;
+  }
+  // Public church live tracking: /[churchSlug]/live or /[churchSlug]/live/[groupId]
+  if (/^\/[^/]+\/live(?:\/.*)?$/.test(pathname)) {
+    return true;
+  }
+  return false;
 }
 
 function AuthGuardInner({ children }: { children: ReactNode }) {

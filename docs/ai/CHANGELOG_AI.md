@@ -4,6 +4,43 @@
 
 ---
 
+## 2026-11-10 — Church Slugs, Slug-Based Routing, Song Administration & Public Live Songbook
+
+- **Church Slug Architecture & Generation Utility (`src/lib/slug.ts`, `supabase/migration_slugs_and_songs.sql`)**:
+  - Implemented centralized slug normalization and smart abbreviation algorithm (e.g. "Grace Community Church" → `gcc`, "St. Mary's Church Chennai" → `smcc`).
+  - Added strict validation rules: 3–30 characters, lowercase alphanumeric and single hyphens, rejects leading/trailing hyphens, double hyphens, and spaces.
+  - Enforced 40+ reserved system route protection (`admin`, `api`, `login`, `signup`, `songs`, `route`, `live`, etc.).
+  - Added case-insensitive unique index on `churches (lower(slug))` in PostgreSQL schema.
+  - Created `church_slug_history` table and `resolve_church_by_slug` / `change_church_slug` PostgreSQL functions for redirect preservation when slugs change.
+- **Slug Availability API & Church Setup Integration**:
+  - Created `/api/churches/check-slug` endpoint with debounced availability validation (350ms) and `excludeChurchId` support.
+  - Enhanced `/church/setup` onboarding with automatic slug suggestion, real-time availability feedback (Checking…, Available, Unavailable, Reserved), URL preview, and race condition handling.
+  - Enhanced `/church/settings` with slug editing, debounced validation, and a consequential change confirmation modal ("Change Church URL?").
+- **Song Administration & Two-Tier Visibility Model**:
+  - Extended `public.songs` with `is_hidden` (boolean default false), `is_public` (boolean default true), and `updated_by` (uuid).
+  - Created `/songs/new` administrative page with title, artist, category, formatted lyrics, YouTube URL, and visibility toggles.
+  - Created `/songs/[songId]/edit` page for modifying songs, toggling draft/hidden status, and permanent deletion with confirmation modal.
+  - Updated `/songs` songbook with role-aware controls: admins can add songs, quick-toggle Hide/Show, and edit; non-admins only see active unhidden songs with no administrative controls.
+  - Updated `/songs/[songId]` with admin edit shortcut and hidden draft indicator.
+  - Updated Supabase RLS: members view unhidden songs; admins manage all songs; public live viewers view unhidden, public songs.
+- **Public Congregation Live Experience with Songs & Fallback Elimination**:
+  - Enhanced `/live/[groupId]` and `/[churchSlug]/live/[groupId]` with an accessible two-tab interface: `[ Live Tracking ] [ Songs ]`.
+  - Added integrated public songbook with instant search and full lyrics modal for congregation sing-along.
+  - **Eliminated silent group fallback**: Removed insecure legacy fallback that silently substituted other groups or dummy coordinates when a link was missing or inactive; now shows a calm, friendly "This live tracking link is unavailable." notice.
+  - Privacy hardening: strictly queries non-sensitive fields; excludes phone numbers, private notes, and internal records.
+- **Slug-Based App Router Architecture (`src/app/[churchSlug]/`)**:
+  - Implemented `src/app/[churchSlug]/layout.tsx` resolving canonical and historical slugs, validating church existence, and enforcing active tenant membership.
+  - Created church-scoped subpages: `home`, `families`, `families/new`, `families/[familyId]`, `route`, `route/[stopId]`, `songs`, `songs/new`, `songs/[songId]`, `songs/[songId]/edit`, `location`, `share`, `tracking`, `tracking/[groupId]`, `admin/dashboard`, `church/settings`, `live`, `live/[groupId]`.
+  - Updated `BottomNav.tsx` to generate church-slug prefixed URLs (`/[churchSlug]/home`, `/[churchSlug]/families`, etc.) with role-aware and slug-aware active tab indicators.
+  - Updated `AuthGuard.tsx` and `NavWrapper.tsx` to recognize `/[churchSlug]/live/*` as public unauthenticated routes without navigation bars.
+  - Backward compatibility: root `/` redirects to canonical `/[currentChurch.slug]/home` when church is loaded; share links format as `/[churchSlug]/live/[groupId]`.
+- **Validation & Security Verification**:
+  - Automated test suite `src/test-security.mjs`: 100% tests passed across privilege escalation, token hashing, expiration, route tenant integrity, slug generation, reserved routes, song authorization boundaries, elimination of silent fallback, and public projection.
+  - TypeScript compilation (`tsc --noEmit`): 0 errors.
+  - Next.js production build (`next build`): Succeeded across all 55 routes.
+
+---
+
 ## 2026-11-10 — Multi-Church Architecture, Secure Onboarding, Invitation Signup & RLS
 
 - **Multi-Church Database Architecture**:

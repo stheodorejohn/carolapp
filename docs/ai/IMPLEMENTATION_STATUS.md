@@ -3,244 +3,161 @@
 > **This file is the most important handoff document.**  
 > Update after every significant change.
 
-- **UI/Layout Defect Fix (Input Leading Icon Text Collision):**
-  - Resolved issue where email input icon was colliding with placeholder and typed text on `/login` and `/signup`.
-  - Added `!pl-11` on email inputs, `!pr-14` on password inputs, and `!pl-9` on search inputs in `families` and `songs`.
-  - Extended `src/app/globals.css` with `.carol-input.has-icon` / `.carol-input-with-icon` and `.carol-input.has-action` / `.carol-input-with-action` rules with `!important` left and right paddings to prevent future regressions.
-
 ---
 
 ## Current Status
 
-**Current phase:** Phase 12 (Multi-Church Architecture, Tenant RLS, Secure Onboarding & Invitation Signup COMPLETED)
+**Current phase:** Phase 13 (Church Slugs, Slug-Based Routing, Song Administration, Public Live Songbook & Security Hardening COMPLETED)
 
 **Last completed task:**  
-- **Phase 12 (Multi-Church Architecture & Tenant Security):**
-  - Database Multi-Tenant Migration (`supabase/migration_multi_church.sql`, `supabase/schema.sql`, `schema.sql`):
-    - `public.churches` (name, slug, created_by, address, city, phone)
-    - `public.church_members` (linking users to churches with authoritative `role` and `status`)
-    - `public.church_invites` (secure invitation tokens with `token_hash`, `role`, `expires_at`, `max_uses`, `use_count`, `is_active`)
-    - `church_id` columns on `families`, `groups`, `songs`, and `routes`
-    - `trg_validate_route_tenant` trigger to reject cross-tenant route corruption
-    - SECURITY DEFINER functions: `is_church_member`, `is_church_admin`, `create_church_with_admin`, `validate_church_invite`, `accept_church_invite`
-    - Removed all open `using (true)` policies, implemented scoped multi-tenant RLS
-  - **Database Types (`src/types/database.ts`):** Added `Church`, `ChurchMember`, `ChurchInvite`, `ChurchRole`, `church_id`
-  - **Auth Context (`src/lib/auth-context.tsx`):**
-    - Database `church_members.role` is the single source of truth for authorization
-    - Derives `authorizedRoles` from database membership; prevents privilege escalation
-    - Manages `currentChurch`, `churchMembership`, `hasChurch`, `createChurch()`, `joinChurchWithInvite()`, `refreshChurch()`
-  - **Guards (`src/components/auth/AuthGuard.tsx` & `NavWrapper.tsx`):**
-    - Permitted public access to `/join/*`
-    - Redirects authenticated users without a church to `/church/setup`
-    - Hides BottomNav on `/church/setup` and `/join/*`
-  - **Admin Church Setup & Onboarding (`src/app/church/setup/page.tsx`):**
-    - Friendly church creation with church name input (14–70 age friendly)
-    - Sets creator as initial Church Administrator; supports joining with code
-  - **Church Settings & Member Management (`src/app/church/settings/page.tsx`):**
-    - Church details, member role management & deactivation, invitation link generation & deactivation
-  - **Cryptographic Invitation API Routes (`src/app/api/invites/*`):**
-    - `POST /api/invites/generate`: Generates 24-byte random token, stores SHA-256 hash in DB, returns link
-    - `GET /api/invites/validate`: Validates token hash, checks expiry and max uses, returns church identity without leaking secrets
-    - `POST /api/invites/accept`: Adds authenticated user to `church_members`, increments use count
-    - `POST /api/invites/deactivate`: Admin deactivates invitation link
-  - **Church Invitation Landing (`src/app/join/[token]/page.tsx`):**
-    - Validates token, prominently displays Church Name before sign up/join
-    - One-click join for signed-in users; guided sign-up/sign-in for new users
-  - **Tenant Query Scoping & UI Updates:**
-    - `src/app/page.tsx`: Displays church name in hero header, scopes overview stats and active group
-    - `src/app/admin/dashboard/page.tsx`: Displays Church Workspace card and quick link to Church Settings & Members
-    - `src/app/settings/groups/page.tsx`: Added Church & Organization settings section
-    - `src/app/families/new/page.tsx` & `src/app/settings/groups/new/page.tsx`: Assigns `church_id`
-    - `src/app/families/page.tsx`, `src/app/songs/page.tsx`, `src/app/route/page.tsx`, `src/app/location/page.tsx`, `src/app/share/page.tsx`: Scoped to active church
-    - `src/app/live/[groupId]/page.tsx`: Hardened public live tracking to strictly query non-sensitive coordinates and progress
-  - **Testing & Validation:**
-    - Security test suite (`src/test-security.mjs`): 100% tests passed
-    - TypeScript compilation (`tsc --noEmit`): 0 errors
-    - Next.js production build (`next build`): Succeeded with zero errors across all 32 routes.
-
-- **Phase 2 (Authentication Foundation):**
-  - Viewport accessibility fix (removed `userScalable: false` and `maximumScale: 1` to restore pinch-to-zoom WCAG 1.4.4)
-  - Created `src/lib/auth-context.tsx` with Supabase Auth, persistent session management, role tracking, and authorized role switching
-  - Created `src/components/auth/AuthGuard.tsx` client-side route guard (protects private routes, permits `/login`, `/signup`, `/live/*`)
-  - Created `src/components/navigation/NavWrapper.tsx` (conditionally hides BottomNav on auth and public live tracking pages)
-  - Implemented real Supabase Auth `src/app/login/page.tsx` with email/password, toggle, error handling, redirect, and Suspense boundary
-  - Implemented `src/app/signup/page.tsx` with real-time 5-criterion password requirements checklist, real-time strength meter, confirm password match, toggle, and auto sign-in
-  - Implemented secure `signOut` across the app
-  - Implemented complete Forgot & Reset Password flow:
-    - `/forgot-password` (`src/app/forgot-password/page.tsx`) with Supabase password reset request and email guidance
-    - `/reset-password` (`src/app/reset-password/page.tsx`) with recovery session detection, strength meter, confirm password match, and expired link handling
-    - "Forgot password?" link on `/login` (`src/app/login/page.tsx`)
-    - `requestPasswordReset` and `updatePassword` in `src/lib/auth-context.tsx`
-    - Dynamic redirect URL resolver `getAppURL()` in `src/lib/utils.ts` for localhost vs Vercel compatibility
-
-- **Phase 3 (Role Management & Authorized Switching):**
-  - Added `AppRole` (`'admin' | 'team_member' | 'driver'`) to types
-  - Added `RoleSwitcherModal` and `UserRoleBadge` components (`src/components/auth/RoleSwitcherModal.tsx`)
-  - Strict security rule enforced: users can only switch between their authorized roles (e.g. Leader/Team Member ↔ Driver; only verified Admins can select Admin)
-  - Active role persisted in `localStorage` with security validation against server JWT metadata
-  - Added role-aware BottomNav (`src/components/navigation/BottomNav.tsx`) that dynamically adapts tabs per role:
-    - Admin: `Today | Families | Route | More`
-    - Driver: `Today | Route | Live | More`
-    - Team Member: `Today | Route | Songs | More`
-
-- **Phase 4 & 5 (Navigation & Shared UI Foundation):**
-  - Updated BottomNav labels to readable 11px font (`text-[11px] font-medium leading-tight`)
-  - Centralized "More" hub at `src/app/admin/dashboard/page.tsx` (User account, active role switch, role-specific tools, sign out)
-  - Redirected redundant `/settings` to `/admin/dashboard`
-
-- **Phase 6 (Today Experience):**
-  - Time-aware dynamic greeting (Good morning/afternoon/evening) with user's name in `src/app/page.tsx`
-  - Integrated `UserRoleBadge` directly in header
-  - Redesigned "Next Stop" into an operational action card with direct Google Maps Directions and contextual visit action
-  - Role-adapted Quick Actions grid based on active role
-
-- **Phase 7 (Route Experience):**
-  - Added prominent Next Destination / Active Stop callout at top of `src/app/route/page.tsx`
-  - Added filter tabs: `All`, `Remaining`, `Visited`
-  - Updated `RouteCard.tsx` with support for `arrived` status and prominent ring styling on active stops
-  - Updated `src/app/route/[stopId]/page.tsx` with activity-oriented language:
-    - `I'm Here — Mark Arrived`
-    - `🎵 Start Carol Visit` (replaces generic 'Check In')
-    - `✅ Complete Carol Visit` (replaces generic 'Check Out')
-    - `Continue to Next Family →` on completion
-
-- **Phase 8 (Family Experience):**
-  - Fixed family back links in `src/app/families/[familyId]/page.tsx` to point back to `/families`
-  - Progressively disclosed raw GPS latitude/longitude behind an advanced details disclosure
-  - Refactored `src/app/families/new/page.tsx` into a guided 4-step wizard:
-    `1. Basics` → `2. Location` → `3. Members` → `4. Review & Save`
-
-- **Phase 9 (Live Location Consolidation):**
-  - Consolidated Live Location experience in `src/app/location/page.tsx`:
-    - Persistent ON / OFF status with visual indicator
-    - Added missing `Stop Location Sharing` button
-    - Integrated congregation tracking link copy and share buttons
-    - Clear privacy boundary explanation
-  - Fixed `src/app/share/page.tsx` to remove the non-functional duration timer (resolves UX-006)
-
-- **UI/Layout Defect Fix (Input Leading Icon Text Collision):**
-  - Resolved issue where email input icon was colliding with placeholder and typed text on `/login` and `/signup`.
-  - Added `!pl-11` on email inputs, `!pr-14` on password inputs, and `!pl-9` on search inputs in `families` and `songs`.
-  - Extended `src/app/globals.css` with `.carol-input.has-icon` / `.carol-input-with-icon` and `.carol-input.has-action` / `.carol-input-with-action` rules with `!important` left and right paddings to prevent future regressions.
+- **Phase 13 (Church Slugs, Slug-Based Routing & Song Administration):**
+  - **Church Slug Architecture (`src/lib/slug.ts`, `supabase/migration_slugs_and_songs.sql`):**
+    - Deterministic slug suggestion algorithm prioritizing memorable initials/acronyms (`Grace Community Church` → `gcc`, `St. Mary's Church Chennai` → `smcc`, `Holy Trinity Church` → `htc`).
+    - Slug normalization: lowercase, strips punctuation/apostrophes, converts non-alphanumeric to hyphens, deduplicates and strips boundary hyphens.
+    - Slug validation rules: 3–30 characters, alphanumeric with single hyphens, rejects leading/trailing hyphens, consecutive hyphens, spaces, and unsafe symbols.
+    - 40+ reserved system slugs protected (`admin`, `api`, `login`, `signup`, `songs`, `route`, `live`, etc.).
+    - Case-insensitive unique index: `create unique index idx_churches_slug_unique on public.churches (lower(slug))`.
+    - Created `public.church_slug_history` table for seamless redirect of previously shared links when slugs change.
+    - Added `resolve_church_by_slug` and `change_church_slug` PostgreSQL functions.
+  - **Slug Availability API (`src/app/api/churches/check-slug/route.ts`):**
+    - Debounced real-time endpoint (350ms) returning `{ available: boolean, reason?: string, normalized: string }`.
+    - Supports `excludeChurchId` for safe self-edits.
+    - Safe race condition handling: database unique constraint remains the ultimate authority.
+  - **Church Setup & Settings UX Integration:**
+    - `src/app/church/setup/page.tsx`: Auto-generates suggested slug as admin types church name; real-time debounced feedback (`Checking…`, `✓ [slug] is available`, `✕ Unavailable`, `Reserved`); URL preview; handles database unique constraint races gracefully.
+    - `src/app/church/settings/page.tsx`: Admin can edit slug with debounced availability check; consequential change confirmation modal warning of link changes before saving.
+  - **Admin Song Management & Two-Tier Visibility:**
+    - Extended `public.songs` with `is_hidden` (boolean default false), `is_public` (boolean default true), and `updated_by` (uuid).
+    - `src/app/songs/new/page.tsx`: Dedicated admin page to add carols (title, artist, category, lyrics, YouTube URL, public/hidden toggles).
+    - `src/app/songs/[songId]/edit/page.tsx`: Admin edit page with lyrics editing, draft/hide toggle, and permanent deletion with confirmation modal.
+    - `src/app/songs/page.tsx`: Role-aware songbook: Admins see `+ Add Song`, quick `Hide` / `Show` toggles, `Edit` links, and "Hidden" badges; non-admins (team members/drivers) only see active unhidden songs with no administrative buttons.
+    - `src/app/songs/[songId]/page.tsx`: Detail view with lyrics and YouTube preview; admins see `Edit` button and hidden indicator; hidden songs blocked for non-admins.
+    - Supabase RLS updated: Members view unhidden songs; admins manage all songs; public live viewers view unhidden, public songs.
+  - **Public Live Experience with Songs & Fallback Elimination (`src/app/live/[groupId]/page.tsx`):**
+    - Two clean tabs: `[ Live Tracking ] [ Songs ]`.
+    - Public Live Songs tab: Instant search, lyrics viewer modal, and carols filtered strictly to the matching church where `is_hidden = false` and `is_public = true`.
+    - **Eliminated silent group fallback**: Removed legacy logic that substituted another group or dummy coordinates; now shows a calm, friendly "This live tracking link is unavailable." state.
+    - Privacy hardening: selects only non-sensitive fields; never exposes phone numbers, notes, or internal member data.
+  - **Slug-Based App Router Architecture (`src/app/[churchSlug]/`):**
+    - Created `src/app/[churchSlug]/layout.tsx`: Resolves canonical and historical slugs, redirects old slugs, validates church existence ("We couldn't find this church"), and enforces active tenant membership for authenticated routes ("You don't have access to this church").
+    - Church-scoped subpages created:
+      `/[churchSlug]/home`, `/[churchSlug]/families`, `/[churchSlug]/families/new`, `/[churchSlug]/families/[familyId]`, `/[churchSlug]/route`, `/[churchSlug]/route/[stopId]`, `/[churchSlug]/songs`, `/[churchSlug]/songs/new`, `/[churchSlug]/songs/[songId]`, `/[churchSlug]/songs/[songId]/edit`, `/[churchSlug]/location`, `/[churchSlug]/share`, `/[churchSlug]/tracking`, `/[churchSlug]/tracking/[groupId]`, `/[churchSlug]/admin/dashboard`, `/[churchSlug]/church/settings`, `/[churchSlug]/live`, `/[churchSlug]/live/[groupId]`.
+    - `BottomNav.tsx`: Automatically formats navigation links with the church slug prefix (`/[churchSlug]/home`, etc.) and highlights tabs correctly.
+    - `AuthGuard.tsx` & `NavWrapper.tsx`: Configured to recognize `/[churchSlug]/live/*` as public unauthenticated routes without bottom navigation.
+    - Root `/` and legacy paths: Redirect authenticated users to `/[currentChurch.slug]/home`; share links point to `/[currentChurch.slug]/live/[groupId]`.
+  - **Testing & Verification:**
+    - Automated security test suite (`src/test-security.mjs`): 100% tests passed (9 test suites covering privilege escalation, token hashing, expiration, tenant isolation, slug generation/validation, reserved slugs, case-insensitive uniqueness, song authorization & visibility, elimination of silent fallback, and public projection).
+    - TypeScript compilation (`tsc --noEmit`): 0 errors.
+    - Next.js production build (`next build`): Succeeded across all 55 routes.
 
 ---
 
 ## Phase Checklist
 
 ```
-Phase 0 — Repository Understanding
-  [x] Package.json inspected
-  [x] All page files read
-  [x] Database schema inspected
-  [x] Component architecture documented
-  [x] UX audit completed
-  [x] Documentation created
+Phase 0 — Repository Understanding & Inspection
+  [x] All handoff documentation inspected in order
+  [x] Git status and log inspected
+  [x] Architecture, types, and schema inspected
+  [x] Security test suite verified
 
-Phase 1 — UX and Accessibility Audit
-  [x] UX audit documented (13 issues found)
-  [x] Critical issues identified
-  [x] Issues resolved (UX-001, UX-002, UX-003, UX-004, UX-005, UX-006, UX-007, UX-008, UX-009, UX-010, UX-013)
+Phase 1 to Phase 11 — UX, Auth & Core Carol Features
+  [x] Viewport accessibility fix (zoom restored)
+  [x] Supabase Auth, login, signup, password strength meter, forgot/reset password
+  [x] Three authorized roles (admin, team_member, driver) with anti-privilege escalation
+  [x] Role-aware BottomNav and More hub
+  [x] Today experience with time-aware greeting and operational Next Stop card
+  [x] Route stop state transitions (Arrived, Start Visit, Complete Visit)
+  [x] Family 4-step wizard & progressive disclosure
+  [x] Live location sharing consolidation
 
-Phase 2 — Authentication and Authorization Foundation
-  [x] Fix viewport (remove userScalable: false)
-  [x] Hide BottomNav on /login and /signup pages
-  [x] Create auth context (src/lib/auth-context.tsx)
-  [x] Implement real Supabase Auth login
-  [x] Create signup page (/signup)
-  [x] Password strength meter component
-  [x] Password requirements checklist component
-  [x] Client route protection (AuthGuard.tsx)
-  [x] Post-login redirect to home
-  [x] Logout functionality across app
+Phase 12 — Multi-Church Architecture & Tenant Security
+  [x] Multi-tenant database schema (churches, church_members, church_invites)
+  [x] Database membership roles as source of truth
+  [x] Row Level Security (RLS) policies scoped per church
+  [x] Cross-tenant route validation trigger
+  [x] Cryptographic invitation links with SHA-256 token hashing
+  [x] Admin church setup and member management
 
-Phase 3 — Role Management
-  [x] Role-aware navigation (BottomNav adapted for Admin, Driver, Team Member)
-  [x] Active role indicator in UI (UserRoleBadge)
-  [x] Role switching with security verification (RoleSwitcherModal)
-  [x] Role-aware page content (Today quick actions & More hub)
-
-Phase 4 — Information Architecture
-  [x] Finalize nav structure (Today, Route, Songs/Live/Families, More)
-  [x] Deduped settings routes (/settings redirects to /admin/dashboard)
-
-Phase 5 — Shared UI Foundation
-  [x] Fix nav label font size (10px → 11px)
-  [x] Touch target review (all action buttons 44px+ height)
-  [x] StatusBadges updated for arrived and in_progress states
-
-Phase 6 — Today Experience
-  [x] Greeting with actual user name
-  [x] Time-aware greeting (morning/afternoon/evening)
-  [x] Next stop prominence and direct navigation
-  [x] Role-adapted quick actions
-
-Phase 7 — Route Experience
-  [x] Current stop visual treatment and arrived state
-  [x] Next stop prominence on route page
-  [x] State transition actions with human caroling terminology
-  [x] Route filter tabs (All, Remaining, Visited)
-
-Phase 8 — Family Experience
-  [x] Family detail progressive disclosure (raw coords hidden behind details)
-  [x] Fixed back buttons from family detail to /families
-  [x] Add family 4-step wizard (Basics → Location → Members → Review)
-
-Phase 9 — Live Location
-  [x] Consolidate tracking/sharing/location (src/app/location/page.tsx)
-  [x] Fix share page duration selector (src/app/share/page.tsx)
-  [x] Clear location sharing ON/OFF status with Stop Sharing control
-
-Phase 10 — Administrative Experience
-  [x] Admin-only tools separated in More hub
-  [x] Full group, route reordering, and family management intact at /settings/groups
-
-Phase 11 — Final Accessibility, Security, Responsive Review
-  [x] Accessibility checked (zoom enabled, aria labels, button targets)
-  [x] Security verified (privilege escalation blocked client-side and verified against server session)
-  [x] Mobile layouts verified
+Phase 13 — Church Slugs, Slug-Based Routing & Song Administration
+  [x] Centralized slug normalization and deterministic abbreviation utility (src/lib/slug.ts)
+  [x] 40+ reserved system route protection
+  [x] Case-insensitive unique slug enforcement in database schema
+  [x] Church slug history table (church_slug_history) for URL redirects
+  [x] Debounced slug availability API (/api/churches/check-slug)
+  [x] Church setup onboarding with automatic suggested slug and real-time validation
+  [x] Church settings slug editing with warning confirmation modal
+  [x] Database fields for song administration (is_hidden, is_public, updated_by)
+  [x] Admin song creation form (/songs/new)
+  [x] Admin song edit form with delete confirmation modal (/songs/[songId]/edit)
+  [x] Role-aware songbook with Hide/Show quick toggles (/songs)
+  [x] Public congregation live page with Live Tracking and Songs tabs
+  [x] Elimination of silent group fallback in public live tracking
+  [x] Slug-based App Router layout and pages (src/app/[churchSlug]/...)
+  [x] Church-slug aware BottomNav navigation
+  [x] AuthGuard and NavWrapper updates for public church live links
+  [x] Security test suite covering all slug, song, and tenant boundaries
+  [x] TypeScript check: 0 errors
+  [x] Production build: 0 errors across all 55 routes
 ```
-
-- **UI/Layout Defect Fix (Input Leading Icon Text Collision):**
-  - Resolved issue where email input icon was colliding with placeholder and typed text on `/login` and `/signup`.
-  - Added `!pl-11` on email inputs, `!pr-14` on password inputs, and `!pl-9` on search inputs in `families` and `songs`.
-  - Extended `src/app/globals.css` with `.carol-input.has-icon` / `.carol-input-with-icon` and `.carol-input.has-action` / `.carol-input-with-action` rules with `!important` left and right paddings to prevent future regressions.
 
 ---
 
-## Modified Files
+## Modified & Created Files
 
 ### Files Created:
-- `src/lib/auth-context.tsx`
-- `src/components/auth/AuthGuard.tsx`
-- `src/components/auth/RoleSwitcherModal.tsx`
-- `src/components/navigation/NavWrapper.tsx`
-- `src/app/signup/page.tsx`
+- `src/lib/slug.ts` (Centralized slug normalization, acronym suggestion, and reserved routes)
+- `src/app/api/churches/check-slug/route.ts` (Debounced slug availability API)
+- `src/app/songs/new/page.tsx` (Admin song creation page)
+- `src/app/songs/[songId]/edit/page.tsx` (Admin song edit & delete page)
+- `src/app/[churchSlug]/layout.tsx` (Slug resolution, redirect, and tenant authorization layout)
+- `src/app/[churchSlug]/page.tsx`
+- `src/app/[churchSlug]/home/page.tsx`
+- `src/app/[churchSlug]/families/page.tsx`
+- `src/app/[churchSlug]/families/new/page.tsx`
+- `src/app/[churchSlug]/families/[familyId]/page.tsx`
+- `src/app/[churchSlug]/route/page.tsx`
+- `src/app/[churchSlug]/route/[stopId]/page.tsx`
+- `src/app/[churchSlug]/songs/page.tsx`
+- `src/app/[churchSlug]/songs/new/page.tsx`
+- `src/app/[churchSlug]/songs/[songId]/page.tsx`
+- `src/app/[churchSlug]/songs/[songId]/edit/page.tsx`
+- `src/app/[churchSlug]/location/page.tsx`
+- `src/app/[churchSlug]/share/page.tsx`
+- `src/app/[churchSlug]/tracking/page.tsx`
+- `src/app/[churchSlug]/tracking/[groupId]/page.tsx`
+- `src/app/[churchSlug]/admin/page.tsx`
+- `src/app/[churchSlug]/admin/dashboard/page.tsx`
+- `src/app/[churchSlug]/church/settings/page.tsx`
+- `src/app/[churchSlug]/live/page.tsx`
+- `src/app/[churchSlug]/live/[groupId]/page.tsx`
+- `supabase/migration_slugs_and_songs.sql`
 
 ### Files Modified:
-- `src/app/layout.tsx` (Viewport accessibility fix, AuthProvider, AuthGuard)
-- `src/app/login/page.tsx` (Real Supabase Auth, Suspense boundary, password toggle, error states)
-- `src/app/page.tsx` (User name greeting, UserRoleBadge, enhanced Next Stop card, role-adapted Quick Actions)
-- `src/components/navigation/BottomNav.tsx` (Role-aware navigation, 11px font)
-- `src/types/database.ts` (Added `AppRole` type)
-- `src/app/admin/dashboard/page.tsx` (Centralized More hub with profile, role switch, role tools, sign out)
-- `src/app/settings/groups/page.tsx` (Integrated useAuth and real sign out in SettingsTab)
-- `src/app/settings/page.tsx` (Redirects to `/admin/dashboard`)
-- `src/app/route/[stopId]/page.tsx` (Carol visit activity terminology, I'm Here, Start Visit, Complete Visit)
-- `src/app/route/page.tsx` (Prominent current stop callout, All/Remaining/Visited filter tabs)
-- `src/components/cards/RouteCard.tsx` (Added `arrived` status handling and active stop rings)
-- `src/app/location/page.tsx` (Live Location consolidation with persistent ON/OFF indicator, Stop Tracking button, public link share)
-- `src/app/share/page.tsx` (Removed fake duration timer, direct congregation share, link to driver GPS)
-- `src/app/families/[familyId]/page.tsx` (Back button fixed to `/families`, raw lat/lng hidden behind progressive disclosure)
-- `src/app/families/new/page.tsx` (4-step wizard: Basics → Location → Members → Review)
-
-- **UI/Layout Defect Fix (Input Leading Icon Text Collision):**
-  - Resolved issue where email input icon was colliding with placeholder and typed text on `/login` and `/signup`.
-  - Added `!pl-11` on email inputs, `!pr-14` on password inputs, and `!pl-9` on search inputs in `families` and `songs`.
-  - Extended `src/app/globals.css` with `.carol-input.has-icon` / `.carol-input-with-icon` and `.carol-input.has-action` / `.carol-input-with-action` rules with `!important` left and right paddings to prevent future regressions.
+- `supabase/schema.sql` (Added slug history, case-insensitive index, songs visibility fields, and RLS)
+- `src/types/database.ts` (Added ChurchSlugHistory, is_hidden, is_public, updated_by to Song)
+- `src/lib/auth-context.tsx` (Normalized church slug handling in createChurch)
+- `src/app/church/setup/page.tsx` (Smart default slug suggestion, debounced availability feedback)
+- `src/app/church/settings/page.tsx` (Slug editing with confirmation modal, URL preview)
+- `src/app/songs/page.tsx` (Role-aware songbook with admin Add/Hide/Show/Edit controls)
+- `src/app/songs/[songId]/page.tsx` (Admin edit shortcut and hidden draft notices)
+- `src/components/cards/SongCard.tsx` (Admin Hide/Show toggles, Edit link, and Hidden badge)
+- `src/app/live/[groupId]/page.tsx` (Two-tab Live Tracking + Songs, eliminated silent fallback)
+- `src/components/auth/AuthGuard.tsx` (Permitted public access to `/[churchSlug]/live/*`)
+- `src/components/navigation/NavWrapper.tsx` (Hides nav on `/[churchSlug]/live/*`)
+- `src/components/navigation/BottomNav.tsx` (Church slug prefixed URLs and active tab indicators)
+- `src/app/page.tsx` (Canonical church slug route redirection and slug-prefixed links)
+- `src/app/share/page.tsx` (Slug-based congregation live tracking link generation)
+- `src/app/tracking/page.tsx` (Scoped to current church and slug routing)
+- `src/test-security.mjs` (Full security and architecture test suite)
+- `docs/ai/DECISIONS.md` (Added D-021 through D-024)
+- `docs/ai/ARCHITECTURE.md` (Updated route map)
+- `docs/ai/PROJECT_CONTEXT.md` (Updated domain model)
+- `docs/ai/CHANGELOG_AI.md` (Documented Phase 13)
 
 ---
 
 ## Next Steps
 
-1. End-to-end integration test with live Supabase instance
-2. Ensure database RLS policies are enabled when moving to production multi-tenant auth
+1. Execute `supabase/migration_slugs_and_songs.sql` in the production Supabase SQL Editor.
+2. PWA offline song lyrics caching for low-reception caroling areas.

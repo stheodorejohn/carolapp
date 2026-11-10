@@ -6,28 +6,142 @@
  * Friendly, accessible first-time onboarding for church administrators.
  * Designed for users aged 14–70: plain language, no tech jargon,
  * clear feedback, high-contrast, large touch targets.
+ * Features smart default church slug generation, debounced availability checking,
+ * and friendly validation states.
  */
 
-import { useState } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { Church as ChurchIcon, TreePine, ArrowRight, CheckCircle2, AlertCircle, Link2, LogOut } from 'lucide-react';
+import {
+  Church as ChurchIcon, TreePine, ArrowRight, CheckCircle2,
+  AlertCircle, Link2, LogOut, Check, RefreshCw, Globe, Edit2
+} from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
+import { generateChurchSlug, normalizeSlug, validateSlug } from '@/lib/slug';
 
 export default function ChurchSetupPage() {
   const router = useRouter();
   const { createChurch, user, signOut, joinChurchWithInvite } = useAuth();
 
   const [churchName, setChurchName] = useState('');
+  const [slug, setSlug] = useState('');
+  const [slugEdited, setSlugEdited] = useState(false);
+  const [checkingSlug, setCheckingSlug] = useState(false);
+  const [slugStatus, setSlugStatus] = useState<'idle' | 'checking' | 'available' | 'unavailable' | 'invalid'>('idle');
+  const [slugFeedback, setSlugFeedback] = useState('');
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [created, setCreated] = useState(false);
-  const [createdChurchName, setCreatedChurchName] = useState('');
+  const [createdChurch, setCreatedChurch] = useState<{ name: string; slug: string | null } | null>(null);
 
   // Alternative tab: enter an invite token
   const [showInviteBox, setShowInviteBox] = useState(false);
   const [inviteTokenInput, setInviteTokenInput] = useState('');
   const [inviteLoading, setInviteLoading] = useState(false);
   const [inviteError, setInviteError] = useState('');
+
+  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Check slug availability against the API
+  const verifySlugAvailability = useCallback(async (candidate: string) => {
+    const validation = validateSlug(candidate);
+    if (!validation.valid) {
+      setSlugStatus('invalid');
+      setSlugFeedback(validation.error ?? 'Invalid URL format');
+      setCheckingSlug(false);
+      return;
+    }
+
+    setCheckingSlug(true);
+    setSlugStatus('checking');
+
+    try {
+      const res = await fetch(`/api/churches/check-slug?slug=${encodeURIComponent(validation.normalized)}`);
+      const data = await res.json();
+
+      if (data.available) {
+        setSlugStatus('available');
+        setSlugFeedback(`${validation.normalized} is available`);
+      } else {
+        setSlugStatus('unavailable');
+        setSlugFeedback(data.reason ?? 'This church URL is already in use. Try another name.');
+      }
+    } catch {
+      // In case of network error, don't hard block user
+      setSlugStatus('idle');
+      setSlugFeedback('');
+    } finally {
+      setCheckingSlug(false);
+    }
+  }, []);
+
+  // Update slug candidate when church name changes (unless user manually edited the slug)
+  const handleChurchNameChange = (val: string) => {
+    setChurchName(val);
+    if (error) setError('');
+
+    if (!slugEdited) {
+      const suggested = generateChurchSlug(val);
+      setSlug(suggested);
+
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+
+      if (suggested && suggested.length >= 3) {
+        setSlugStatus('checking');
+        setCheckingSlug(true);
+        debounceTimerRef.current = setTimeout(() => {
+          verifySlugAvailability(suggested);
+        }, 400);
+      } else {
+        setSlugStatus('idle');
+        setSlugFeedback('');
+        setCheckingSlug(false);
+      }
+    }
+  };
+
+  // Update slug when user directly edits the slug field
+  const handleSlugChange = (val: string) => {
+    setSlugEdited(true);
+    const clean = normalizeSlug(val);
+    setSlug(clean);
+    if (error) setError('');
+
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+
+    if (!clean) {
+      setSlugStatus('idle');
+      setSlugFeedback('');
+      setCheckingSlug(false);
+      return;
+    }
+
+    if (clean.length < 3) {
+      setSlugStatus('invalid');
+      setSlugFeedback('Church URL must be at least 3 characters.');
+      setCheckingSlug(false);
+      return;
+    }
+
+    setSlugStatus('checking');
+    setCheckingSlug(true);
+    debounceTimerRef.current = setTimeout(() => {
+      verifySlugAvailability(clean);
+    }, 400);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+    };
+  }, []);
 
   async function handleCreateChurch(e: React.FormEvent) {
     e.preventDefault();
@@ -44,16 +158,30 @@ export default function ChurchSetupPage() {
       return;
     }
 
+    const cleanSlug = normalizeSlug(slug || generateChurchSlug(trimmed));
+    const validation = validateSlug(cleanSlug);
+    if (!validation.valid) {
+      setError(validation.error ?? 'Please choose a valid church URL.');
+      return;
+    }
+
+    if (slugStatus === 'unavailable') {
+      setError('This church URL is already in use. Please choose another one.');
+      return;
+    }
+
     setLoading(true);
     try {
-      const church = await createChurch(trimmed);
-      setCreatedChurchName(church.name);
+      const church = await createChurch(trimmed, cleanSlug);
+      setCreatedChurch({ name: church.name, slug: church.slug ?? cleanSlug });
       setCreated(true);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : '';
       console.error('[ChurchSetup] creation error:', err);
-      if (msg.includes('unique') || msg.includes('duplicate')) {
-        setError('A church with this name or slug already exists. Please try adding your city or area.');
+      if (msg.includes('unique') || msg.includes('duplicate') || msg.includes('already in use')) {
+        setError('This church URL was just taken. Please choose another one.');
+        setSlugStatus('unavailable');
+        setSlugFeedback('This church URL was just taken. Try another name.');
       } else {
         setError('Unable to create church. Please check your connection and try again.');
       }
@@ -148,6 +276,7 @@ export default function ChurchSetupPage() {
 
               {!showInviteBox ? (
                 <form onSubmit={handleCreateChurch} className="space-y-4">
+                  {/* Church Name Input */}
                   <div>
                     <label htmlFor="church-name" className="block text-xs font-bold text-slate-700 mb-1.5">
                       Church Name
@@ -156,24 +285,86 @@ export default function ChurchSetupPage() {
                       id="church-name"
                       type="text"
                       value={churchName}
-                      onChange={e => {
-                        setChurchName(e.target.value);
-                        if (error) setError('');
-                      }}
+                      onChange={e => handleChurchNameChange(e.target.value)}
                       placeholder="e.g. St. Mary's Church"
                       required
                       autoFocus
                       disabled={loading}
                       className="carol-input w-full px-4 py-3.5 text-sm font-medium text-slate-800 bg-white border border-slate-200 rounded-xl focus:border-green-600 focus:ring-2 focus:ring-green-100 transition-all outline-none"
                     />
-                    <p className="text-[11px] text-slate-400 mt-1.5">
-                      This will be displayed to your carol teams, families, and congregation.
+                    <p className="text-[11px] text-slate-400 mt-1">
+                      Appears in your team header, invitation links, and live tracking.
+                    </p>
+                  </div>
+
+                  {/* Church URL Identifier / Slug Field */}
+                  <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200/80 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label htmlFor="church-slug" className="block text-xs font-bold text-slate-700">
+                        Church URL
+                      </label>
+                      <span className="text-[11px] text-slate-400">Short &amp; memorable</span>
+                    </div>
+
+                    <div className="flex items-center rounded-xl bg-white border border-slate-200 overflow-hidden focus-within:border-green-600 focus-within:ring-2 focus-within:ring-green-100">
+                      <span className="pl-3 pr-1 text-xs text-slate-400 select-none font-mono">
+                        /
+                      </span>
+                      <input
+                        id="church-slug"
+                        type="text"
+                        value={slug}
+                        onChange={e => handleSlugChange(e.target.value)}
+                        placeholder="e.g. smc"
+                        disabled={loading}
+                        className="w-full py-2.5 pr-3 text-xs font-mono font-medium text-slate-800 bg-transparent outline-none"
+                        autoCapitalize="none"
+                        autoCorrect="off"
+                        spellCheck="false"
+                      />
+                      {checkingSlug && (
+                        <span className="pr-3 text-slate-400">
+                          <RefreshCw size={13} className="animate-spin" />
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Slug Real-Time Feedback */}
+                    {slugFeedback && (
+                      <div className="text-[11px] flex items-center gap-1.5 pt-0.5">
+                        {slugStatus === 'available' && (
+                          <span className="text-green-700 font-medium flex items-center gap-1">
+                            <Check size={12} className="stroke-[3]" />
+                            <span>✓ {slugFeedback}</span>
+                          </span>
+                        )}
+                        {(slugStatus === 'unavailable' || slugStatus === 'invalid') && (
+                          <span className="text-red-600 font-medium flex items-center gap-1">
+                            <AlertCircle size={12} />
+                            <span>{slugFeedback}</span>
+                          </span>
+                        )}
+                        {slugStatus === 'checking' && (
+                          <span className="text-slate-500">Checking URL availability…</span>
+                        )}
+                      </div>
+                    )}
+
+                    <p className="text-[11px] text-slate-400 leading-tight">
+                      Your team and congregation will access tracking and songs via this link.
                     </p>
                   </div>
 
                   <button
                     type="submit"
-                    disabled={loading || !churchName.trim()}
+                    disabled={
+                      loading ||
+                      !churchName.trim() ||
+                      !slug.trim() ||
+                      slugStatus === 'unavailable' ||
+                      slugStatus === 'invalid' ||
+                      checkingSlug
+                    }
                     className="btn-primary w-full py-4 text-sm font-bold shadow-md flex items-center justify-center gap-2 disabled:opacity-50"
                   >
                     {loading ? (
@@ -261,7 +452,12 @@ export default function ChurchSetupPage() {
                 <span className="text-xs font-semibold text-green-700 uppercase tracking-wider bg-green-50 px-3 py-1 rounded-full border border-green-200">
                   Church Created Successfully
                 </span>
-                <h2 className="text-2xl font-bold text-slate-800 mt-3">{createdChurchName}</h2>
+                <h2 className="text-2xl font-bold text-slate-800 mt-3">{createdChurch?.name}</h2>
+                {createdChurch?.slug && (
+                  <p className="text-xs font-mono text-green-700 font-semibold mt-1">
+                    /{createdChurch.slug}
+                  </p>
+                )}
                 <p className="text-xs text-slate-500 mt-1">
                   You are now the initial administrator for this church.
                 </p>
@@ -283,7 +479,7 @@ export default function ChurchSetupPage() {
 
               <button
                 type="button"
-                onClick={() => router.replace('/')}
+                onClick={() => router.replace(createdChurch?.slug ? `/${createdChurch.slug}/home` : '/')}
                 className="btn-primary w-full py-4 text-sm font-bold shadow-md flex items-center justify-center gap-2"
               >
                 <span>Enter Church Workspace</span>
@@ -296,4 +492,3 @@ export default function ChurchSetupPage() {
     </div>
   );
 }
-

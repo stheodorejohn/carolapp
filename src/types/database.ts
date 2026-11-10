@@ -123,6 +123,13 @@ export interface Route {
   church?: Church;
 }
 
+export interface ChurchSlugHistory {
+  id: string;
+  church_id: string;
+  slug: string;
+  created_at: string;
+}
+
 export interface Song {
   id: string;
   church_id?: string;
@@ -132,6 +139,9 @@ export interface Song {
   youtube_url: string | null;
   category: string | null;
   order_index: number;
+  is_hidden: boolean;
+  is_public: boolean;
+  updated_by?: string | null;
   created_at: string;
   updated_at: string;
   church?: Church;

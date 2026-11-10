@@ -26,7 +26,7 @@ The project already uses Supabase for the database. Supabase Auth is built-in, f
 - Magic link / OTP — more complex UX than username+password for the target age range
 - Custom auth — explicitly not recommended (security risk)
 
-**Status:** Decision made, implementation pending
+**Status:** Implemented
 
 ---
 
@@ -48,7 +48,7 @@ Supabase Auth's `signInWithPassword` requires an email. Rather than building a c
 - Pure username lookup table — extra complexity, extra DB query on each login
 - Phone number — not appropriate for this application
 
-**Status:** Decision made, implementation pending
+**Status:** Implemented
 
 ---
 
@@ -72,7 +72,7 @@ The existing codebase defines `UserRole = 'admin' | 'leader'`. The database grou
 - 3 roles: admin, team_member, driver — requires schema change, more complexity
 - 4 roles including public — public users are unauthenticated, not a role
 
-**Status:** Decision made, may be revisited if DB schema change is acceptable
+**Status:** Superseded by D-011 and D-017
 
 ---
 
@@ -94,7 +94,7 @@ The Supabase service role key is required to modify user metadata server-side. R
 - Auth context — reads role from session
 - RLS policies — can use `auth.jwt() -> 'user_metadata' -> 'role'` for enforcement
 
-**Status:** Decision made, may need revision based on Supabase RLS requirements
+**Status:** Superseded by D-017
 
 ---
 
@@ -125,7 +125,7 @@ Remove "Tracking" from primary nav (it's a secondary action, not primary navigat
 - 5 items: Today, Route, Live, Songs, More — adds complexity, 5 items on small screens is crowded
 - Keep "Tracking" in nav — confusing label as identified in audit
 
-**Status:** Decision made, implementation pending
+**Status:** Implemented
 
 ---
 
@@ -143,7 +143,7 @@ Use Next.js route groups: create `(auth)` group for login/signup without BottomN
 - `src/app/layout.tsx`
 - Route directory structure (may need reorganization)
 
-**Status:** Decision made, implementation pending
+**Status:** Implemented
 
 ---
 
@@ -169,7 +169,7 @@ Balances security with usability. These are standard modern password requirement
 **Note:**  
 Client-side validation is for UX only. Backend (Supabase) enforces the actual constraint.
 
-**Status:** Decision made, implementation pending
+**Status:** Implemented
 
 ---
 
@@ -187,29 +187,6 @@ WCAG 1.4.4 requires text resizing up to 200% without loss of functionality. Disa
 - `src/app/layout.tsx` — viewport export
 
 **Status:** Implemented
-
----
-
-## D-015 — Environment-Aware Dynamic Auth Redirect URLs
-
-**Date:** 2026-11-09
-
-**Decision:**  
-Use `getAppURL('/login')` to dynamically pass `emailRedirectTo` during `supabase.auth.signUp()`.
-- Locally (development): evaluates to `http://localhost:3000/login`.
-- On Vercel (production & preview): evaluates to `https://<project-or-branch>.vercel.app/login`.
-- In Supabase Dashboard: whitelist `http://localhost:3000/**` and `https://*.vercel.app/**`.
-
-**Reason:**  
-Ensures confirmation emails and auth links automatically redirect to the exact environment where the action originated without requiring separate Supabase projects or hardcoded URLs.
-
-**Affected areas:**
-- `src/lib/utils.ts` (`getAppURL`)
-- `src/lib/auth-context.tsx` (`signUp`)
-- Supabase Dashboard URL Configuration
-
-**Status:** Implemented
- in Phase 3
 
 ---
 
@@ -280,10 +257,10 @@ Enforced strict anti-privilege escalation:
 
 **Decision:**  
 Implemented route protection via a dedicated `<AuthGuard>` component in `src/app/layout.tsx`.
-- Public routes: `/login`, `/signup`, `/live/*`
+- Public routes: `/login`, `/signup`, `/live/*`, `/join/*`, `/[churchSlug]/live/*`
 - Private routes: all other application pages.
 - Unauthenticated users attempting to access private routes are redirected to `/login?redirect=<target>`.
-- Authenticated users attempting to access `/login` or `/signup` are redirected to `/`.
+- Authenticated users attempting to access `/login` or `/signup` are redirected to `/` or `/[churchSlug]/home`.
 
 **Reason:**  
 Next.js App Router with Supabase client-side sessions manages tokens in browser storage. An AuthGuard in the root layout guarantees no protected view or data query mounts without an authenticated session.
@@ -357,8 +334,6 @@ Ensures confirmation emails and auth links automatically redirect to the exact e
 - Supabase Dashboard URL Configuration
 
 **Status:** Implemented
-
-
 
 ---
 
@@ -460,5 +435,108 @@ Protects congregation families' private contact details from public exposure whi
 **Affected areas:**
 - `src/app/live/[groupId]/page.tsx`
 - `supabase/schema.sql` (RLS policies for anon users)
+
+**Status:** Implemented
+
+---
+
+## D-021 — Memorable Church Slugs with Smart Acronym/Initial Generation
+
+**Date:** 2026-11-10
+
+**Decision:**  
+Every church has a unique, memorable, human-readable slug (e.g. `smc`, `gcc`, `htc`). Implemented a deterministic slug suggestion algorithm that:
+1. Normalizes the church name (lowercase, strips apostrophes, replaces symbols).
+2. Prioritizes memorable initials/acronyms (e.g. "Grace Community Church" → `gcc`, "St. Mary's Church Chennai" → `smcc`).
+3. Enforces strict validation: 3–30 characters, alphanumeric with single hyphens, no leading/trailing hyphens, no consecutive hyphens, no spaces.
+4. Protects 40+ reserved system routes (`admin`, `api`, `login`, `songs`, `route`, `live`, etc.).
+5. Validates availability in real-time via debounced API (`/api/churches/check-slug`) with database unique constraints as ultimate authority.
+
+**Reason:**  
+Target audience (ages 14–70) needs short, memorable URLs they can easily type or share via WhatsApp/SMS without cumbersome UUIDs.
+
+**Affected areas:**
+- `src/lib/slug.ts`
+- `src/app/api/churches/check-slug/route.ts`
+- `src/app/church/setup/page.tsx`
+- `src/app/church/settings/page.tsx`
+- `supabase/migration_slugs_and_songs.sql`
+
+**Status:** Implemented
+
+---
+
+## D-022 — Multi-Tenant Slug-Based Routing & Historical Redirection
+
+**Date:** 2026-11-10
+
+**Decision:**  
+Introduced `src/app/[churchSlug]/` scoped App Router infrastructure (`/[churchSlug]/home`, `/[churchSlug]/families`, `/[churchSlug]/route`, `/[churchSlug]/songs`, `/[churchSlug]/location`, `/[churchSlug]/admin/dashboard`, `/[churchSlug]/live/[groupId]`).
+Added `public.church_slug_history` table:
+When an administrator changes the church slug in Church Settings, the old slug is archived in history, and subsequent visits to the old URL are seamlessly redirected to the canonical slug without breaking previously shared bookmarks or links.
+The route layout validates church existence ("We couldn't find this church") and checks tenant membership for authenticated routes ("You don't have access to this church").
+Bottom navigation dynamically adapts links to use the active church slug prefix.
+
+**Reason:**  
+Ensures clean tenant-aware URLs, prevents IDOR/privilege escalation, maintains deep link compatibility, and preserves legacy URLs.
+
+**Affected areas:**
+- `src/app/[churchSlug]/layout.tsx`
+- `src/app/[churchSlug]/*` (all subpages)
+- `src/components/navigation/BottomNav.tsx`
+- `src/components/auth/AuthGuard.tsx`
+- `src/components/navigation/NavWrapper.tsx`
+- `supabase/schema.sql`, `supabase/migration_slugs_and_songs.sql`
+
+**Status:** Implemented
+
+---
+
+## D-023 — Song Administration & Two-Tier Visibility Model
+
+**Date:** 2026-11-10
+
+**Decision:**  
+Created role-aware song management and a two-tier visibility model:
+1. `songs.is_hidden`: `false` (default) means visible to members; `true` hides the song from ordinary users and public live views (used for drafts).
+2. `songs.is_public`: `true` (default) allows the song to be sung by congregation on the public live page when not hidden.
+3. Church administrators can Add, Edit, Hide, Show, and Permanently Delete songs (with a mandatory confirmation dialog).
+4. Non-admin members (team members, drivers) can only view active, unhidden songs and search/read lyrics; all administrative controls are hidden from their UI and blocked by database RLS.
+
+**Reason:**  
+Prevents confusion during caroling events, protects incomplete drafts, and ensures administrative capabilities are strictly authorized at both the UI and database levels.
+
+**Affected areas:**
+- `src/types/database.ts`
+- `src/app/songs/page.tsx`
+- `src/app/songs/new/page.tsx`
+- `src/app/songs/[songId]/page.tsx`
+- `src/app/songs/[songId]/edit/page.tsx`
+- `src/components/cards/SongCard.tsx`
+- `supabase/schema.sql`, `supabase/migration_slugs_and_songs.sql`
+
+**Status:** Implemented
+
+---
+
+## D-024 — Public Live Experience with Songs & Silent Fallback Elimination
+
+**Date:** 2026-11-10
+
+**Decision:**  
+Enhanced the public congregation live page (`/[churchSlug]/live/[groupId]` and `/live/[groupId]`):
+1. Integrated simple two-tab UI: `[ Live Tracking ] [ Songs ]`.
+2. Public Live Songs tab allows congregation members to search and sing along with lyrics for all active, unhidden, public carols belonging to that church.
+3. **Eliminated silent group fallback**: Removed legacy logic that silently substituted another active group if the requested group was missing or inactive. Now displays a calm, friendly "This live tracking link is unavailable." notice.
+4. Strict field projection: Never uses `select('*')` on public endpoints; excludes phone numbers, private notes, and internal member data.
+
+**Reason:**  
+Prevents data leakage across churches, prevents misleading tracking data from broken links, and delivers a complete caroling experience for church congregations.
+
+**Affected areas:**
+- `src/app/live/[groupId]/page.tsx`
+- `src/app/[churchSlug]/live/[groupId]/page.tsx`
+- `src/app/[churchSlug]/live/page.tsx`
+- `src/test-security.mjs`
 
 **Status:** Implemented

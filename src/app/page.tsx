@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
+import { useRouter, usePathname } from 'next/navigation';
 import {
   CalendarDays, MapPin, Link2, Users, Music,
   ChevronRight, CheckCircle2, Clock3, RefreshCw, LogOut,
@@ -16,10 +17,21 @@ import type { DashboardStats, Route } from '@/types/database';
 
 export default function HomePage() {
   const { user, activeRole, currentChurch, signOut } = useAuth();
+  const router = useRouter();
+  const pathname = usePathname();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [nextStop, setNextStop] = useState<Route | null>(null);
   const [groupId, setGroupId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Canonical slug route redirection
+  useEffect(() => {
+    if (pathname === '/' && currentChurch?.slug) {
+      router.replace(`/${currentChurch.slug}/home`);
+    }
+  }, [pathname, currentChurch?.slug, router]);
+
+  const churchPath = (sub: string) => currentChurch?.slug ? `/${currentChurch.slug}${sub}` : sub;
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -221,7 +233,7 @@ export default function HomePage() {
                 </a>
               )}
               <Link
-                href={`/route/${nextStop.id}`}
+                href={churchPath(`/route/${nextStop.id}`)}
                 className="btn-primary flex-1 py-2.5 text-xs font-bold gap-1 rounded-xl shadow-sm text-center justify-center inline-flex"
               >
                 {nextStop.status === 'in_progress' ? 'Open Active Visit →' :
@@ -240,28 +252,28 @@ export default function HomePage() {
           {activeRole === 'driver' ? (
             <>
               <QuickAction
-                href="/location"
+                href={churchPath('/location')}
                 icon={<Navigation size={20} className="text-blue-600" />}
                 iconBg="bg-blue-50"
                 title="Live GPS Location"
                 sub="Share and track vehicle location"
               />
               <QuickAction
-                href="/route"
+                href={churchPath('/route')}
                 icon={<MapPin size={20} className="text-green-700" />}
                 iconBg="bg-green-50"
                 title="Team Route"
                 sub="View all stops and directions"
               />
               <QuickAction
-                href="/share"
+                href={churchPath('/share')}
                 icon={<Link2 size={20} className="text-amber-600" />}
                 iconBg="bg-amber-50"
                 title="Congregation Share Link"
                 sub="Link for families to view live location"
               />
               <QuickAction
-                href="/songs"
+                href={churchPath('/songs')}
                 icon={<Music size={20} className="text-purple-600" />}
                 iconBg="bg-purple-50"
                 title="Carol Songs"
@@ -271,28 +283,28 @@ export default function HomePage() {
           ) : activeRole === 'admin' ? (
             <>
               <QuickAction
-                href="/families"
+                href={churchPath('/families')}
                 icon={<Users size={20} className="text-purple-600" />}
                 iconBg="bg-purple-50"
                 title="Manage Families"
                 sub="View, add, and organize family stops"
               />
               <QuickAction
-                href={groupId ? `/tracking/${groupId}` : '/tracking'}
+                href={churchPath(groupId ? `/tracking/${groupId}` : '/tracking')}
                 icon={<MapPin size={20} className="text-green-700" />}
                 iconBg="bg-green-50"
                 title="Live Tracking Map"
                 sub="Monitor carol team in real-time"
               />
               <QuickAction
-                href="/share"
+                href={churchPath('/share')}
                 icon={<Link2 size={20} className="text-blue-600" />}
                 iconBg="bg-blue-50"
                 title="Generate / Share Link"
                 sub="Create link for church congregation"
               />
               <QuickAction
-                href="/admin/dashboard"
+                href={churchPath('/admin/dashboard')}
                 icon={<Shield size={20} className="text-emerald-700" />}
                 iconBg="bg-emerald-50"
                 title="Carol Groups & Admin"
@@ -302,32 +314,25 @@ export default function HomePage() {
           ) : (
             <>
               <QuickAction
-                href="/route"
+                href={churchPath('/route')}
                 icon={<MapPin size={20} className="text-green-700" />}
                 iconBg="bg-green-50"
                 title="Today's Route"
                 sub="View stops and mark visits complete"
               />
               <QuickAction
-                href="/songs"
+                href={churchPath('/songs')}
                 icon={<Music size={20} className="text-amber-600" />}
                 iconBg="bg-amber-50"
                 title="Carol Songs & Lyrics"
                 sub="Lyrics for caroling visits"
               />
               <QuickAction
-                href={groupId ? `/tracking/${groupId}` : '/tracking'}
-                icon={<Navigation size={20} className="text-blue-600" />}
+                href={churchPath('/share')}
+                icon={<Link2 size={20} className="text-blue-600" />}
                 iconBg="bg-blue-50"
-                title="Team Live Map"
-                sub="View vehicle position and route"
-              />
-              <QuickAction
-                href="/share"
-                icon={<Link2 size={20} className="text-purple-600" />}
-                iconBg="bg-purple-50"
-                title="Share Tracking Link"
-                sub="Send live tracking to church members"
+                title="Congregation Live Link"
+                sub="Share public tracking link with families"
               />
             </>
           )}

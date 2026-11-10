@@ -21,6 +21,7 @@ import React, {
 import type { Session, User } from '@supabase/supabase-js';
 import { supabase } from './supabase';
 import { getAppURL } from './utils';
+import { normalizeSlug } from './slug';
 import type { UserRole, AppRole, ChurchRole, Church, ChurchMember } from '@/types/database';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -335,12 +336,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const createChurch = useCallback(async (name: string, slug?: string): Promise<Church> => {
     const churchName = name.trim();
     if (!churchName) throw new Error('Church name cannot be empty');
+    const cleanSlug = slug ? normalizeSlug(slug) : null;
 
     // Attempt RPC first
     try {
       const { data, error } = await supabase.rpc('create_church_with_admin', {
         church_name: churchName,
-        church_slug: slug ? slug.trim() : null,
+        church_slug: cleanSlug,
       });
 
       if (!error && data) {
@@ -363,7 +365,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .from('churches')
       .insert({
         name: churchName,
-        slug: slug ? slug.trim() : null,
+        slug: cleanSlug,
         created_by: currentUser.id,
       })
       .select('*')

@@ -10,7 +10,7 @@ import { supabase, createServerClient } from '@/lib/supabase';
  */
 export async function GET(req: NextRequest) {
   try {
-    const { searchParams } = new URL(req.url);
+    const searchParams = req.nextUrl.searchParams;
     const token = searchParams.get('token')?.trim();
 
     if (!token) {
@@ -81,7 +81,10 @@ export async function GET(req: NextRequest) {
       church_name: church?.name ?? 'Carol Church',
       role: invite.role ?? 'team_member',
     });
-  } catch (err) {
+  } catch (err: unknown) {
+    if ((err as any)?.digest === 'NEXT_PRERENDER_INTERRUPTED') {
+      throw err;
+    }
     console.error('[API /invites/validate] Unexpected error:', err);
     return NextResponse.json(
       { valid: false, error: 'Unable to validate invitation. Please check your network connection.' },

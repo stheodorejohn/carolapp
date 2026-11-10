@@ -49,7 +49,9 @@ export default function ShareLocationPage() {
 
   const groupId = group?.slug || group?.id || '';
   const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
-  const shareUrl = `${origin}/live/${groupId}`;
+  const shareUrl = currentChurch?.slug
+    ? `${origin}/${currentChurch.slug}/live/${groupId}`
+    : `${origin}/live/${groupId}`;
 
   async function handleCopy() {
     await navigator.clipboard.writeText(shareUrl);

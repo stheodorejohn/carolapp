@@ -1,44 +1,45 @@
 # Carol Application — Prioritized Next Steps
 
-> Updated: 2026-11-09  
-> Status: Major Phases 2 through 9 Completed
+> Updated: 2026-11-10  
+> Status: Phase 13 Completed (Church Slugs, Slug-Based Routing, Song Administration, Public Live Songbook)
 
 ---
 
 ## Completed Tasks Summary
 
-- [x] **P0 — Viewport Accessibility Fix**: Removed `userScalable: false` and `maximumScale: 1` in `src/app/layout.tsx`.
-- [x] **P1 — Auth Context**: Created `src/lib/auth-context.tsx` with Supabase Auth, persistent session, and role switching.
-- [x] **P2 — Wrap App in AuthProvider**: Added `AuthProvider` in `src/app/layout.tsx`.
-- [x] **P3 — Hide BottomNav on Auth & Public Pages**: Added `NavWrapper.tsx` hiding nav on `/login`, `/signup`, and `/live/*`.
-- [x] **P4 — Real Login Implementation**: Full Supabase Auth sign-in with show/hide password, friendly errors, return redirect, and Suspense wrapper in `src/app/login/page.tsx`.
-- [x] **P5 — Signup Page**: Created `src/app/signup/page.tsx` with 5-rule password checklist, real-time strength meter, confirm password match, and auto sign-in.
-- [x] **P6 — Route Protection**: Created `src/components/auth/AuthGuard.tsx` guarding all private routes and redirecting to login.
-- [x] **P7 — Logout Functionality**: Implemented secure sign out across Home (`/`), More (`/admin/dashboard`), and Settings (`/settings/groups`).
-- [x] **P8 — Navigation Label Size Fix**: Increased bottom nav font size to 11px with medium weight.
-- [x] **P9 — Navigation Restructure**: Role-aware tabs (Today, Route, Songs/Live/Families, More).
-- [x] **P10 — Role Management & Switching**: Created `RoleSwitcherModal` and `UserRoleBadge` with strict anti-escalation security check.
-- [x] **P11 — Today Screen Redesign**: Time-aware greeting, UserRoleBadge, operational Next Stop card with Directions and status-driven actions, role-adapted Quick Actions.
-- [x] **P12 — Route Experience & Terminology**: Added Current Stop banner and All/Remaining/Visited filter tabs on `/route`; human-centered visit activity buttons (`I'm Here`, `Start Carol Visit`, `Complete Carol Visit`) on `/route/[stopId]`.
-- [x] **P13 — Family Details Progressive Disclosure**: Fixed back buttons to `/families` and tucked raw GPS coordinates behind an expandable details block.
-- [x] **P14 — Add Family Wizard**: 4-step wizard (`1. Basics` → `2. Location` → `3. Members` → `4. Review & Save`).
-- [x] **P15 — Live Location Consolidation**: Persistent ON/OFF indicator, Stop Tracking control, congregation share preview, removed non-functional duration selector in `/share`.
-- [x] **P16 — Multi-Church Architecture & Tenant RLS**: Created `churches`, `church_members`, `church_invites`, added `church_id` across tables with route consistency trigger `trg_validate_route_tenant`. Replaced open RLS with strict `is_church_member` and `is_church_admin` policies.
-- [x] **P17 — Church Onboarding & Identity**: Implemented `/church/setup` for initial admin onboarding and church name creation. Displayed prominent church identity across Home, More, and public links.
-- [x] **P18 — Cryptographic Invitation System**: Built `/api/invites/generate`, `/api/invites/validate`, `/api/invites/accept`, `/api/invites/deactivate` storing SHA-256 token hashes, enforcing expiration and usage limits.
-- [x] **P19 — Invitation Join & Signup Flow**: Created `/join/[token]` landing page displaying church name before signup, with auto-join support on `/signup?invite=...` and `/login?invite=...`.
-- [x] **P20 — Church Administration & Member Management**: Created `/church/settings` for updating church name, changing member roles, toggling member status, and managing invitation links.
+- [x] **P16 — Multi-Church Architecture & Tenant RLS**: Multi-tenant database schema (`churches`, `church_members`, `church_invites`, tenant foreign keys, tenant trigger, security definer functions).
+- [x] **P17 — Cryptographic Invitation System**: 24-byte random tokens, SHA-256 token hashing, expiration & usage limits, join landing page (`/join/[token]`).
+- [x] **P18 — Church Onboarding & Settings**: Initial setup (`/church/setup`) and member administration (`/church/settings`).
+- [x] **P21 — Centralized Slug Utilities & Rules**: `src/lib/slug.ts` with deterministic acronym suggestion, 3–30 char validation, 40+ reserved routes protection, and database case-insensitive uniqueness (`supabase/migration_slugs_and_songs.sql`).
+- [x] **P22 — Slug Availability API & Setup Integration**: Debounced API (`/api/churches/check-slug`) connected to `/church/setup` and `/church/settings` with confirmation modal before changing URLs.
+- [x] **P23 — Slug-Based Routing Infrastructure**: Next.js App Router structure under `src/app/[churchSlug]/` with canonical and historical slug resolution (`public.church_slug_history`), tenant membership verification, and church-prefixed navigation (`BottomNav.tsx`).
+- [x] **P24 — Role-Aware Song Administration**: `is_hidden`, `is_public`, and `updated_by` columns on `songs`; dedicated creation (`/songs/new`) and editing (`/songs/[songId]/edit`) pages; role-scoped songbook (`/songs`) with admin Hide/Show quick toggles and delete confirmation.
+- [x] **P25 — Public Live Tracking & Songbook**: Two-tab congregation view (`[ Live Tracking ] [ Songs ]`) with instant lyric search; eliminated silent group fallback with friendly unavailable notice; privacy hardening on all public data queries.
+- [x] **P26 — Security & Build Validation**: Automated test suite (`src/test-security.mjs`) 100% passing; TypeScript compilation 0 errors; Next.js production build 0 errors across all 55 routes.
+
+---
+
+## NEXT IMMEDIATE TASK:
+
+### Task 1 — Production SQL Migration Execution
+**Priority:** High  
+**Goal:** Run `supabase/migration_slugs_and_songs.sql` in the production Supabase SQL Editor to apply:
+1. `public.church_slug_history` table and `idx_church_slug_history_slug` index.
+2. Case-insensitive unique index `idx_churches_slug_unique` on `public.churches (lower(slug))`.
+3. `is_hidden`, `is_public`, and `updated_by` columns on `public.songs`.
+4. `resolve_church_by_slug` and `change_church_slug` PostgreSQL functions.
+5. Scoped RLS policies for songs and public church slug resolution.
 
 ---
 
 ## Remaining Backlog & Future Enhancements
 
-### Task 1 — Offline PWA & Song Caching
+### Task 2 — Offline PWA & Song Caching
 **Priority:** Medium  
-**Goal:** Enhance service worker in `public/manifest.json` so caroling teams can view song lyrics and today's route offline when entering areas with low mobile reception.  
-**Files:** `public/manifest.json`, `src/app/songs/page.tsx`.
+**Goal:** Enhance service worker in `public/manifest.json` and client cache so caroling teams can view song lyrics and today's route offline when entering low-reception areas during visits.  
+**Files:** `public/manifest.json`, `src/app/songs/page.tsx`, `src/app/[churchSlug]/songs/page.tsx`.
 
-### Task 2 — Congregation Arrival Notification
+### Task 3 — Congregation Arrival Push Notification
 **Priority:** Low  
-**Goal:** Allow families viewing the public `/live/[groupId]` page to request an optional browser push notification or audio chime when the carol group arrives at their home.  
-**Files:** `src/app/live/[groupId]/page.tsx`.
+**Goal:** Allow families viewing the public `/[churchSlug]/live/[groupId]` page to request an optional browser push notification or audio chime when the carol team arrives at their home.  
+**Files:** `src/app/live/[groupId]/page.tsx`, `src/app/[churchSlug]/live/[groupId]/page.tsx`.
