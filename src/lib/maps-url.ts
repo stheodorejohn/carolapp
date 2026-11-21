@@ -39,27 +39,28 @@ export function parseLongMapsUrl(url: string): ParseResult {
   }
 
   try {
-    // ── Pattern 1: /@lat,lng,zoom — most common desktop/place URL ──────────────
-    // e.g. https://www.google.com/maps/place/Foo/@13.0827,80.2707,17z/data=...
-    // Also covers direction URLs that contain a viewport @lat,lng
-    const atMatch = url.match(/@(-?\d{1,3}\.?\d*),(-?\d{1,3}\.?\d*)/);
-    if (atMatch) {
-      const lat = parseFloat(atMatch[1]);
-      const lng = parseFloat(atMatch[2]);
-      if (isValidCoord(lat, lng)) {
-        return { ok: true, lat, lng, source: '@lat,lng' };
-      }
-    }
-
-    // ── Pattern 2: !3dlat!4dlng — data-encoded place/directions coords ─────────
+    // ── Pattern 1: !3dlat!4dlng — exact dropped-pin coords (highest accuracy) ──
     // e.g. ...data=!4m5!...!3d13.082700!4d80.270700
-    // Also present in embed pb= parameter
+    // Prioritised over @lat,lng because !3d/!4d encode the actual pin, whereas
+    // @lat,lng is the camera viewport centre which can be slightly offset.
     const dataMatch = url.match(/!3d(-?\d+\.?\d*)!4d(-?\d+\.?\d*)/);
     if (dataMatch) {
       const lat = parseFloat(dataMatch[1]);
       const lng = parseFloat(dataMatch[2]);
       if (isValidCoord(lat, lng)) {
         return { ok: true, lat, lng, source: '!3d!4d data params' };
+      }
+    }
+
+    // ── Pattern 2: /@lat,lng,zoom — camera viewport (fallback) ─────────────────
+    // e.g. https://www.google.com/maps/place/Foo/@13.0827,80.2707,17z/data=...
+    // Used when no !3d!4d pin is encoded (search results, directions viewport).
+    const atMatch = url.match(/@(-?\d{1,3}\.?\d*),(-?\d{1,3}\.?\d*)/);
+    if (atMatch) {
+      const lat = parseFloat(atMatch[1]);
+      const lng = parseFloat(atMatch[2]);
+      if (isValidCoord(lat, lng)) {
+        return { ok: true, lat, lng, source: '@lat,lng' };
       }
     }
 
