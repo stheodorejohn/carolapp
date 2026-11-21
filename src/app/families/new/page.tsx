@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth-context';
+import { classifyAndParse } from '@/lib/maps-url';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -47,37 +48,6 @@ type Tab = 'manual' | 'import';
 
 function uid() {
   return Math.random().toString(36).slice(2, 9);
-}
-
-/**
- * Extracts latitude & longitude from common Google Maps URL formats:
- * - https://www.google.com/maps/place/.../@13.0827,80.2707,17z/...
- * - https://maps.google.com/?q=13.0827,80.2707
- * - https://www.google.com/maps?q=13.0827,80.2707
- * - https://www.google.com/maps/search/?api=1&query=13.0827,80.2707
- * Returns { lat, lng } or null if not parseable.
- */
-function parseGoogleMapsUrl(url: string): { lat: number; lng: number } | null {
-  try {
-    // Pattern 1: /@lat,lng,zoom
-    const atMatch = url.match(/@(-?\d+\.?\d*),(-?\d+\.?\d*)/);
-    if (atMatch) return { lat: parseFloat(atMatch[1]), lng: parseFloat(atMatch[2]) };
-
-    // Pattern 2: ?q=lat,lng or &q=lat,lng
-    const qMatch = url.match(/[?&]q=(-?\d+\.?\d*),(-?\d+\.?\d*)/);
-    if (qMatch) return { lat: parseFloat(qMatch[1]), lng: parseFloat(qMatch[2]) };
-
-    // Pattern 3: query=lat,lng
-    const queryMatch = url.match(/[?&]query=(-?\d+\.?\d*),(-?\d+\.?\d*)/);
-    if (queryMatch) return { lat: parseFloat(queryMatch[1]), lng: parseFloat(queryMatch[2]) };
-
-    // Pattern 4: ll=lat,lng
-    const llMatch = url.match(/[?&]ll=(-?\d+\.?\d*),(-?\d+\.?\d*)/);
-    if (llMatch) return { lat: parseFloat(llMatch[1]), lng: parseFloat(llMatch[2]) };
-  } catch {
-    // ignore
-  }
-  return null;
 }
 
 const TEMPLATE_HEADERS = ['Name *', 'Address *', 'Phone', 'Notes'];
@@ -182,6 +152,7 @@ function ManualForm({ onSuccess }: { onSuccess: () => void }) {
   const [errors, setErrors] = useState<Partial<FamilyDraft>>({});
   const [locationParsed, setLocationParsed] = useState<{ lat: number; lng: number } | null>(null);
   const [locationError, setLocationError] = useState('');
+  const [locationResolving, setLocationResolving] = useState(false);
 
   const set = (k: keyof FamilyDraft) => (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
     setForm(f => ({ ...f, [k]: e.target.value }));
@@ -199,7 +170,7 @@ function ManualForm({ onSuccess }: { onSuccess: () => void }) {
     return '';
   }
 
-  function handleMapsLink(e: ChangeEvent<HTMLInputElement>) {
+  async function handleMapsLink(e: ChangeEvent<HTMLInputElement>) {
     const url = e.target.value;
     setForm(f => ({ ...f, mapsLink: url }));
     setLocationError('');
@@ -207,23 +178,55 @@ function ManualForm({ onSuccess }: { onSuccess: () => void }) {
 
     if (!url.trim()) return;
 
-    // Short links (maps.app.goo.gl) — save the link but note coords can't be auto-parsed
-    if (url.includes('goo.gl') || url.includes('maps.app')) {
-      setLocationError('Short link saved ✓ — coordinates can\'t be auto-read from this URL. Enter lat/lng manually below if needed.');
-      return;
-    }
+    const classified = classifyAndParse(url);
 
-    const coords = parseGoogleMapsUrl(url);
-    if (coords) {
-      setLocationParsed(coords);
+    // ── Long URL: parse immediately (sync) ──────────────────────────────────────
+    if (classified.ok) {
+      setLocationParsed({ lat: classified.lat, lng: classified.lng });
       setForm(f => ({
         ...f,
         mapsLink: url,
-        latitude: coords.lat.toString(),
-        longitude: coords.lng.toString(),
+        latitude: classified.lat.toString(),
+        longitude: classified.lng.toString(),
       }));
-    } else {
-      setLocationError('Could not read coordinates. Try: right-click a spot on Google Maps → "What\'s here?" → copy the lat,lng shown.');
+      return;
+    }
+
+    // ── Long URL: no coords found ────────────────────────────────────────────────
+    if (!classified.needsResolution) {
+      setLocationError(
+        'No GPS coordinates found. Try pasting the full browser URL from Google Maps, or enter lat/lng manually below.'
+      );
+      return;
+    }
+
+    // ── Short URL: resolve server-side ──────────────────────────────────────────
+    setLocationResolving(true);
+    setLocationError('');
+
+    try {
+      const res = await fetch('/api/resolve-maps-url', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url }),
+      });
+      const json = await res.json();
+
+      if (json.ok && typeof json.lat === 'number' && typeof json.lng === 'number') {
+        setLocationParsed({ lat: json.lat, lng: json.lng });
+        setForm(f => ({
+          ...f,
+          mapsLink: json.resolvedUrl ?? url,
+          latitude: json.lat.toString(),
+          longitude: json.lng.toString(),
+        }));
+      } else {
+        setLocationError(json.error ?? 'Could not read GPS coordinates from this link. Enter lat/lng manually below.');
+      }
+    } catch {
+      setLocationError('Network error while resolving the link. Enter lat/lng manually below.');
+    } finally {
+      setLocationResolving(false);
     }
   }
 
@@ -490,20 +493,34 @@ function ManualForm({ onSuccess }: { onSuccess: () => void }) {
               </label>
               <div className="relative">
                 <div className="absolute left-3 inset-y-0 flex items-center pointer-events-none">
-                  <MapPin size={15} className="text-slate-400" />
+                  <MapPin size={15} className={locationResolving ? 'text-green-500 animate-pulse' : 'text-slate-400'} />
                 </div>
                 <input
                   id="maps-link"
                   type="url"
-                  placeholder="Paste Google Maps URL"
+                  placeholder="Paste any Google Maps URL or short link (maps.app.goo.gl/…)"
                   value={form.mapsLink}
                   onChange={handleMapsLink}
+                  disabled={locationResolving}
                   className="carol-input !pl-9 py-3 text-sm"
                 />
+                {locationResolving && (
+                  <div className="absolute right-3 inset-y-0 flex items-center">
+                    <svg className="animate-spin h-4 w-4 text-green-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                    </svg>
+                  </div>
+                )}
               </div>
-              {locationError && (
-                <p className="text-xs text-red-500 mt-1 flex items-center gap-1">
-                  <AlertCircle size={11} /> {locationError}
+              {locationResolving && (
+                <p className="text-xs text-green-700 mt-1 flex items-center gap-1">
+                  <MapPin size={11} className="animate-pulse" /> Resolving short link and reading GPS…
+                </p>
+              )}
+              {!locationResolving && locationError && (
+                <p className="text-xs text-amber-700 mt-1 flex items-center gap-1.5 bg-amber-50 rounded-lg px-2.5 py-1.5">
+                  <AlertCircle size={11} className="flex-shrink-0" /> {locationError}
                 </p>
               )}
               {locationParsed && (
