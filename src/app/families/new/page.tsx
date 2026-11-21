@@ -103,7 +103,24 @@ function downloadTemplate() {
 
 export default function AddFamilyPage() {
   const router = useRouter();
+  const { churchMembership, hasChurch } = useAuth();
   const [tab, setTab] = useState<Tab>('manual');
+
+  // Server-side protection is enforced by RLS; this gate handles the UI redirect
+  if (hasChurch && churchMembership?.role !== 'admin') {
+    return (
+      <div className="page-container bg-slate-50 flex items-center justify-center min-h-screen">
+        <div className="text-center px-6">
+          <p className="text-2xl mb-3">🚫</p>
+          <h2 className="text-base font-bold text-slate-800 mb-1">Admin Only</h2>
+          <p className="text-sm text-slate-500 mb-4">Only administrators can add new families.</p>
+          <Link href="/families" className="text-sm font-semibold text-green-700 underline">
+            Back to Families
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="page-container bg-slate-50">

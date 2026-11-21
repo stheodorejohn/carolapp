@@ -9,8 +9,8 @@
 
 import { useState } from 'react';
 import {
-  Shield, Users, Navigation, Check, X,
-  ChevronDown, LogOut, User as UserIcon
+  Shield, Users, Check, X,
+  ChevronDown
 } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import type { AppRole } from '@/types/database';
@@ -38,17 +38,9 @@ const ROLE_METAS: Record<AppRole, RoleMeta> = {
     role: 'team_member',
     label: 'Carol Team Member',
     badgeLabel: 'Team Member',
-    description: 'View today\'s route, song lyrics, and mark stops visited.',
+    description: 'View today\'s route, song lyrics, mark stops visited, and share live GPS.',
     icon: Users,
     color: 'text-green-700 bg-green-50 border-green-200',
-  },
-  driver: {
-    role: 'driver',
-    label: 'Driver / Sharer',
-    badgeLabel: 'Driver',
-    description: 'Navigate to families and share live GPS location.',
-    icon: Navigation,
-    color: 'text-blue-700 bg-blue-50 border-blue-200',
   },
 };
 

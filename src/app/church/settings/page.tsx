@@ -434,13 +434,11 @@ export default function ChurchSettingsPage() {
   const roleBadgeStyle: Record<ChurchRole, string> = {
     admin: 'bg-purple-50 text-purple-700 border-purple-200',
     team_member: 'bg-green-50 text-green-700 border-green-200',
-    driver: 'bg-blue-50 text-blue-700 border-blue-200',
   };
 
   const roleLabel: Record<ChurchRole, string> = {
     admin: 'Administrator',
     team_member: 'Carol Team Member',
-    driver: 'Driver / Sharer',
   };
 
   return (
@@ -989,9 +987,7 @@ export default function ChurchSettingsPage() {
                     <p className="text-[11px] text-slate-400">
                       {r === 'admin'
                         ? 'Full church and member management'
-                        : r === 'driver'
-                        ? 'Navigation and location sharing'
-                        : 'View route and complete carol visits'}
+                        : 'View route, complete carol visits, and share live GPS'}
                     </p>
                   </div>
                   <input

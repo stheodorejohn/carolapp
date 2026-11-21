@@ -4,7 +4,7 @@
  * Auth Context for Let's Carol
  *
  * Provides authentication state (user, role, session) and church tenancy
- * (currentChurch, churchMembership, authorizedRoles) to all client components.
+ * (currentChurch, churchMembership) to all client components.
  *
  * Source of truth for roles is church_members.role in the database,
  * preventing any client-side privilege escalation.
@@ -30,7 +30,6 @@ export interface AuthUser {
   id: string;
   email: string;
   role: UserRole;
-  authorizedRoles: AppRole[];
   activeRole: AppRole;
   full_name: string | null;
   churchRole: ChurchRole | null;
@@ -41,11 +40,12 @@ interface AuthContextValue {
   session: Session | null;
   loading: boolean;
   activeRole: AppRole;
+  /** All roles the user is authorized to use in this church. */
   authorizedRoles: AppRole[];
   currentChurch: Church | null;
   churchMembership: ChurchMember | null;
   hasChurch: boolean;
-  /** Switch user's active UI role. Rejects if role is not authorized. */
+  /** @deprecated Role switching is disabled. This is a no-op stub kept for compatibility. */
   switchRole: (role: AppRole) => boolean;
   /** Sign in with email + password. Throws on failure. */
   signIn: (email: string, password: string) => Promise<void>;
@@ -67,7 +67,6 @@ interface AuthContextValue {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-const STORAGE_KEY_ACTIVE_ROLE = 'carol_active_role';
 const STORAGE_KEY_ACTIVE_CHURCH = 'carol_active_church_id';
 
 function syncSessionCookie(s: Session | null) {
@@ -82,25 +81,12 @@ function syncSessionCookie(s: Session | null) {
 
 export function deriveAuthorizedRoles(membershipRole: ChurchRole | null): AppRole[] {
   if (membershipRole === 'admin') {
-    return ['admin', 'team_member', 'driver'];
-  }
-  if (membershipRole === 'driver') {
-    return ['driver', 'team_member'];
+    return ['admin', 'team_member'];
   }
   if (membershipRole === 'team_member') {
-    return ['team_member', 'driver'];
+    return ['team_member'];
   }
   return ['team_member'];
-}
-
-function resolveActiveRole(authorizedRoles: AppRole[]): AppRole {
-  if (typeof window !== 'undefined') {
-    const saved = localStorage.getItem(STORAGE_KEY_ACTIVE_ROLE) as AppRole | null;
-    if (saved && authorizedRoles.includes(saved)) {
-      return saved;
-    }
-  }
-  return authorizedRoles[0] ?? 'team_member';
 }
 
 // ─── Context ─────────────────────────────────────────────────────────────────
@@ -180,15 +166,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     membershipRole: ChurchRole | null
   ): AuthUser => {
     const meta = supabaseUser.user_metadata ?? {};
-    const authorizedRoles = deriveAuthorizedRoles(membershipRole);
-    const activeRole = resolveActiveRole(authorizedRoles);
+    const activeRole: AppRole = membershipRole === 'admin' ? 'admin' : 'team_member';
     const role: UserRole = membershipRole === 'admin' ? 'admin' : 'leader';
 
     return {
       id: supabaseUser.id,
       email: supabaseUser.email ?? '',
       role,
-      authorizedRoles,
       activeRole,
       full_name: meta.full_name ?? meta.name ?? null,
       churchRole: membershipRole,
@@ -258,24 +242,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => subscription.unsubscribe();
   }, [loadChurchData, buildAuthUser]);
 
-  const switchRole = useCallback((newRole: AppRole): boolean => {
-    if (!user) return false;
-
-    // Strict Authorization Check: target role must be in user's authorizedRoles
-    if (!user.authorizedRoles.includes(newRole)) {
-      console.warn(`[Auth] Attempted unauthorized role switch to: ${newRole}`);
-      return false;
-    }
-
-    try {
-      localStorage.setItem(STORAGE_KEY_ACTIVE_ROLE, newRole);
-    } catch {
-      // Ignore localStorage errors (e.g. private mode)
-    }
-
-    setUser(prev => prev ? { ...prev, activeRole: newRole } : null);
-    return true;
-  }, [user]);
+  // Role switching disabled — stub kept for interface compatibility
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const switchRole = useCallback((_newRole: AppRole): boolean => false, []);
 
   const signIn = useCallback(async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
@@ -390,7 +359,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = useCallback(async () => {
     try {
-      localStorage.removeItem(STORAGE_KEY_ACTIVE_ROLE);
       localStorage.removeItem(STORAGE_KEY_ACTIVE_CHURCH);
     } catch {
       // Ignore
@@ -403,7 +371,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const activeRole: AppRole = user?.activeRole ?? 'team_member';
-  const authorizedRoles: AppRole[] = user?.authorizedRoles ?? ['team_member'];
+  const authorizedRoles: AppRole[] = user ? [user.activeRole] : ['team_member'];
   const hasChurch = currentChurch !== null && churchMembership !== null;
 
   return (

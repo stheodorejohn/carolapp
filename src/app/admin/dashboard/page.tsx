@@ -20,14 +20,12 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { supabase } from '@/lib/supabase';
-import { RoleSwitcherModal } from '@/components/auth/RoleSwitcherModal';
 import type { DashboardStats, Group } from '@/types/database';
 
 export default function MorePage() {
-  const { user, activeRole, authorizedRoles, currentChurch, signOut } = useAuth();
+  const { user, activeRole, currentChurch, signOut } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
-  const [roleModalOpen, setRoleModalOpen] = useState(false);
   const [activeGroup, setActiveGroup] = useState<Group | null>(null);
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -76,12 +74,9 @@ export default function MorePage() {
 
   const displayName = user?.full_name ?? (user?.email ? user.email.split('@')[0] : 'Carol Team');
   const initial = (displayName[0] ?? 'C').toUpperCase();
-  const canSwitchRole = authorizedRoles.length > 1;
-
   const roleLabels: Record<string, string> = {
     admin: 'Administrator',
     team_member: 'Carol Team Member',
-    driver: 'Driver / Sharer',
   };
 
   return (
@@ -95,8 +90,7 @@ export default function MorePage() {
       <div className="px-4 pt-4 pb-8 space-y-5">
         {/* ── User Profile & Role Card ── */}
         <div className="carol-card p-5">
-          <div className="flex items-center gap-3.5">
-            <span className="flex items-center justify-center w-12 h-12 rounded-2xl bg-green-700 text-white text-lg font-bold shadow-sm">
+          <div className="flex items-center gap-3.5">            <span className="flex items-center justify-center w-12 h-12 rounded-2xl bg-green-700 text-white text-lg font-bold shadow-sm">
               {initial}
             </span>
             <div className="flex-1 min-w-0">
@@ -109,22 +103,6 @@ export default function MorePage() {
               </div>
             </div>
           </div>
-
-          {canSwitchRole && (
-            <div className="mt-4 pt-3.5 border-t border-slate-100 flex items-center justify-between">
-              <div>
-                <p className="text-xs font-semibold text-slate-700">Multiple Roles Available</p>
-                <p className="text-[11px] text-slate-400">Switch between authorized profiles</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setRoleModalOpen(true)}
-                className="btn-outline py-1.5 px-3.5 text-xs font-semibold rounded-full border-green-700 text-green-700 hover:bg-green-50"
-              >
-                Switch Role
-              </button>
-            </div>
-          )}
         </div>
 
         {/* ── Church Identity Card ── */}
@@ -217,40 +195,10 @@ export default function MorePage() {
         )}
 
         {/* ── Driver Tools ── */}
-        {activeRole === 'driver' && (
-          <div>
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2.5 px-1">
-              Driver Operations
-            </p>
-            <div className="carol-card divide-y divide-slate-100">
-              <MenuRow
-                href="/location"
-                icon={<Navigation size={18} className="text-blue-600" />}
-                iconBg="bg-blue-50"
-                title="Live GPS Location Sharing"
-                subtitle="Broadcast vehicle location to congregation"
-              />
-              <MenuRow
-                href="/route"
-                icon={<MapPin size={18} className="text-green-700" />}
-                iconBg="bg-green-50"
-                title="Team Route & Navigation"
-                subtitle="View route sequence and open directions"
-              />
-              <MenuRow
-                href="/share"
-                icon={<Link2 size={18} className="text-purple-600" />}
-                iconBg="bg-purple-50"
-                title="Share Tracking Link"
-                subtitle="Share public tracking link with families"
-              />
-            </div>
-          </div>
-        )}
+        {/* Driver role removed — operational tools now available to all members */}
 
-        {/* ── Team Member Tools ── */}
-        {activeRole === 'team_member' && (
-          <div>
+        {/* ── Team Member & Operational Tools ── */}
+        <div>
             <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2.5 px-1">
               Carol Team Tools
             </p>
@@ -285,7 +233,6 @@ export default function MorePage() {
               />
             </div>
           </div>
-        )}
 
         {/* ── App Info ── */}
         <div>
@@ -323,13 +270,7 @@ export default function MorePage() {
         </button>
       </div>
 
-      {/* Role Switcher Modal */}
-      {canSwitchRole && (
-        <RoleSwitcherModal
-          isOpen={roleModalOpen}
-          onClose={() => setRoleModalOpen(false)}
-        />
-      )}
+      {/* Role Switcher Modal — removed (role switching disabled) */}
     </div>
   );
 }

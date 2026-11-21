@@ -37,7 +37,11 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json().catch(() => ({}));
     const churchId = body.church_id?.trim();
-    const role = body.role ?? 'team_member';
+    // Only allow valid two-role model — reject driver or unknown roles
+    const VALID_ROLES = ['admin', 'team_member'] as const;
+    type ValidRole = typeof VALID_ROLES[number];
+    const rawRole = body.role ?? 'team_member';
+    const role: ValidRole = VALID_ROLES.includes(rawRole as ValidRole) ? (rawRole as ValidRole) : 'team_member';
     const expiresInDays = Number(body.expires_in_days) || null;
     const maxUses = body.max_uses ? Number(body.max_uses) : null;
 

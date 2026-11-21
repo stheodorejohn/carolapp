@@ -249,38 +249,7 @@ export default function HomePage() {
       <div className="px-4">
         <p className="text-sm font-semibold text-slate-500 mb-3">Quick Actions</p>
         <div className="space-y-3">
-          {activeRole === 'driver' ? (
-            <>
-              <QuickAction
-                href={churchPath('/location')}
-                icon={<Navigation size={20} className="text-blue-600" />}
-                iconBg="bg-blue-50"
-                title="Live GPS Location"
-                sub="Share and track vehicle location"
-              />
-              <QuickAction
-                href={churchPath('/route')}
-                icon={<MapPin size={20} className="text-green-700" />}
-                iconBg="bg-green-50"
-                title="Team Route"
-                sub="View all stops and directions"
-              />
-              <QuickAction
-                href={churchPath('/share')}
-                icon={<Link2 size={20} className="text-amber-600" />}
-                iconBg="bg-amber-50"
-                title="Congregation Share Link"
-                sub="Link for families to view live location"
-              />
-              <QuickAction
-                href={churchPath('/songs')}
-                icon={<Music size={20} className="text-purple-600" />}
-                iconBg="bg-purple-50"
-                title="Carol Songs"
-                sub="Lyrics and songs for the team"
-              />
-            </>
-          ) : activeRole === 'admin' ? (
+          {activeRole === 'admin' ? (
             <>
               <QuickAction
                 href={churchPath('/families')}
@@ -307,7 +276,7 @@ export default function HomePage() {
                 href={churchPath('/admin/dashboard')}
                 icon={<Shield size={20} className="text-emerald-700" />}
                 iconBg="bg-emerald-50"
-                title="Carol Groups & Admin"
+                title="Carol Groups &amp; Admin"
                 sub="Manage groups, routes, and settings"
               />
             </>
@@ -324,8 +293,15 @@ export default function HomePage() {
                 href={churchPath('/songs')}
                 icon={<Music size={20} className="text-amber-600" />}
                 iconBg="bg-amber-50"
-                title="Carol Songs & Lyrics"
+                title="Carol Songs &amp; Lyrics"
                 sub="Lyrics for caroling visits"
+              />
+              <QuickAction
+                href={churchPath('/location')}
+                icon={<Navigation size={20} className="text-blue-600" />}
+                iconBg="bg-blue-50"
+                title="Live GPS Location"
+                sub="Share and track vehicle location"
               />
               <QuickAction
                 href={churchPath('/share')}

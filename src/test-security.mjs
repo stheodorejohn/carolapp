@@ -9,35 +9,33 @@ function assert(condition, message) {
 }
 
 function deriveAuthorizedRoles(membershipRole) {
+  // Two-role model: admin and team_member only. No driver role.
   if (membershipRole === 'admin') {
-    return ['admin', 'team_member', 'driver'];
-  }
-  if (membershipRole === 'driver') {
-    return ['driver', 'team_member'];
+    return ['admin', 'team_member'];
   }
   if (membershipRole === 'team_member') {
-    return ['team_member', 'driver'];
+    return ['team_member'];
   }
   return ['team_member'];
 }
 
-console.log('=== MULTI-CHURCH, SLUG, SONGS & SECURITY TESTS ===\n');
+console.log('=== TWO-ROLE MODEL, MULTI-CHURCH, SLUG, SONGS & SECURITY TESTS ===\n');
 
-// ── Test 1: Authoritative Role Hierarchy (Privilege Escalation Prevention) ──
-console.log('--- Test 1: Privilege Escalation Prevention ---');
+// ── Test 1: Authoritative Two-Role Hierarchy (Privilege Escalation Prevention) ──
+console.log('--- Test 1: Privilege Escalation Prevention (Two-Role Model) ---');
 const adminRoles = deriveAuthorizedRoles('admin');
-assert(adminRoles.includes('admin') && adminRoles.includes('team_member') && adminRoles.includes('driver'),
-  'Admin membership authorized for admin, team_member, driver');
+assert(adminRoles.includes('admin') && adminRoles.includes('team_member'),
+  'Admin membership authorized for admin and team_member');
+assert(!adminRoles.includes('driver'), 'Admin role no longer includes driver (driver role removed)');
 
 const memberRoles = deriveAuthorizedRoles('team_member');
 assert(!memberRoles.includes('admin'), 'Team member CANNOT switch to or acquire admin role');
 assert(memberRoles.includes('team_member'), 'Team member authorized for team_member');
-
-const driverRoles = deriveAuthorizedRoles('driver');
-assert(!driverRoles.includes('admin'), 'Driver CANNOT switch to or acquire admin role');
+assert(!memberRoles.includes('driver'), 'Team member role does not include driver (driver role removed)');
 
 const nullRoles = deriveAuthorizedRoles(null);
 assert(!nullRoles.includes('admin'), 'Unassigned user CANNOT acquire admin role');
+assert(!nullRoles.includes('driver'), 'Unassigned user does not get driver role');
 
 
 // ── Test 2: Token Hashing & Validation Logic ──
@@ -196,8 +194,8 @@ function querySongsForUser(userRole, userChurchId) {
   if (userRole === 'admin') {
     return songLibrary.filter(s => s.church_id === userChurchId);
   }
-  // Member sees only unhidden songs for their church
-  if (userRole === 'team_member' || userRole === 'driver') {
+  // Team member sees only unhidden songs for their church
+  if (userRole === 'team_member') {
     return songLibrary.filter(s => s.church_id === userChurchId && s.is_hidden === false);
   }
   // Public anonymous user sees only unhidden and public songs for the requested church
@@ -390,8 +388,8 @@ const privateJoint = resolveJointLiveRoute('gcc', 'g2');
 assert(privateJoint.valid === false, 'Private group fails safely');
 
 
-// ── Test 12: Driver vs Admin vs Team Member Location & Group Update Permissions ──
-console.log('\n--- Test 12: Driver vs Admin vs Team Member Permissions ---');
+// ── Test 12: Two-Role GPS & Group Update Permissions ──
+console.log('\n--- Test 12: Two-Role GPS & Group Update Permissions ---');
 
 function authorizeGroupUpdate(userRole, userChurchId, targetGroup, updatedFields) {
   // Must belong to the same church
@@ -399,23 +397,18 @@ function authorizeGroupUpdate(userRole, userChurchId, targetGroup, updatedFields
     throw new Error('Unauthorized: Cross-church access rejected');
   }
 
-  // Team members cannot update groups at all
-  if (userRole === 'team_member') {
-    throw new Error('Unauthorized: Team members cannot update group or broadcast location');
-  }
+  const LOCATION_FIELDS = new Set([
+    'current_latitude', 'current_longitude', 'current_speed',
+    'current_direction', 'last_location_update'
+  ]);
 
   // Admin can update all fields
   if (userRole === 'admin') {
     return true;
   }
 
-  // Driver can ONLY update live location fields
-  if (userRole === 'driver') {
-    const LOCATION_FIELDS = new Set([
-      'current_latitude', 'current_longitude', 'current_speed',
-      'current_direction', 'last_location_update'
-    ]);
-
+  // Team members can update GPS location fields (GPS is an operational capability)
+  if (userRole === 'team_member') {
     const attemptedConfigChange = Object.keys(updatedFields).some(f => !LOCATION_FIELDS.has(f));
     if (attemptedConfigChange) {
       throw new Error('Unauthorized: Only administrators can modify group configuration');
@@ -432,28 +425,34 @@ const testGroup = { id: 'grp-test', church_id: churchA, name: 'Team Alpha', vehi
 assert(authorizeGroupUpdate('admin', churchA, testGroup, { name: 'Team Beta', vehicle_number: 'TN 01 XY 9999' }) === true,
   'Admin can update group configuration');
 
-// Driver updating GPS location
-assert(authorizeGroupUpdate('driver', churchA, testGroup, {
+// Admin updating GPS location
+assert(authorizeGroupUpdate('admin', churchA, testGroup, {
   current_latitude: 13.0827, current_longitude: 80.2707, current_speed: 35
-}) === true, 'Driver can update live location fields');
+}) === true, 'Admin can update live location fields');
 
-// Driver attempting to modify vehicle number or name
-let driverConfigBlocked = false;
-try {
-  authorizeGroupUpdate('driver', churchA, testGroup, { name: 'Renamed by Driver' });
-} catch (e) {
-  driverConfigBlocked = e.message.includes('Only administrators can modify group configuration');
-}
-assert(driverConfigBlocked === true, 'Driver is strictly blocked from modifying group configuration');
+// Team member updating GPS location (now allowed — GPS is operational)
+assert(authorizeGroupUpdate('team_member', churchA, testGroup, {
+  current_latitude: 13.0827, current_longitude: 80.2707, current_speed: 35
+}) === true, 'Team member CAN update live location fields (GPS is an operational capability)');
 
-// Team member attempting to update location or config
-let teamMemberBlocked = false;
+// Team member attempting to modify group configuration
+let teamMemberConfigBlocked = false;
 try {
-  authorizeGroupUpdate('team_member', churchA, testGroup, { current_latitude: 13.0827 });
+  authorizeGroupUpdate('team_member', churchA, testGroup, { name: 'Renamed by Member' });
 } catch (e) {
-  teamMemberBlocked = e.message.includes('Team members cannot update group');
+  teamMemberConfigBlocked = e.message.includes('Only administrators can modify group configuration');
 }
-assert(teamMemberBlocked === true, 'Team member cannot update location or impersonate driver');
+assert(teamMemberConfigBlocked === true, 'Team member is blocked from modifying group configuration');
+
+// Cross-church access rejected for any role
+let crossChurchBlocked = false;
+try {
+  const otherChurchGroup = { id: 'grp-other', church_id: churchB, name: 'Team B' };
+  authorizeGroupUpdate('admin', churchA, otherChurchGroup, { current_latitude: 13 });
+} catch (e) {
+  crossChurchBlocked = e.message.includes('Cross-church access rejected');
+}
+assert(crossChurchBlocked === true, 'Cross-church group access is rejected for all roles');
 
 
 // ── Test 13: Atomic Church Creation Validation ──
@@ -506,6 +505,53 @@ try {
   reservedSlugCreationBlocked = e.message.includes('reserved system route');
 }
 assert(reservedSlugCreationBlocked === true, 'Reserved route slug is rejected in church creation');
+
+
+// ── Test 13b: Family Creation Authorization (Critical Two-Role Boundary) ──
+console.log('\n--- Test 13b: Family Creation Authorization ---');
+
+function authorizeFamilyCreate(userRole, userChurchId, targetChurchId) {
+  if (userChurchId !== targetChurchId) {
+    throw new Error('Unauthorized: Cross-church access rejected');
+  }
+  if (userRole !== 'admin') {
+    throw new Error('Unauthorized: Only administrators can create new families');
+  }
+  return true;
+}
+
+// Admin can create a family
+assert(authorizeFamilyCreate('admin', churchA, churchA) === true,
+  'Admin can create a new family');
+
+// Team member cannot create a family (THE key permission boundary)
+let teamMemberFamilyCreateBlocked = false;
+try {
+  authorizeFamilyCreate('team_member', churchA, churchA);
+} catch (e) {
+  teamMemberFamilyCreateBlocked = e.message.includes('Only administrators can create new families');
+}
+assert(teamMemberFamilyCreateBlocked === true,
+  'Team member CANNOT create a new family — this is the ONLY mandatory permission difference');
+
+// Cross-church family creation is always blocked
+let crossChurchFamilyBlocked = false;
+try {
+  authorizeFamilyCreate('admin', churchA, churchB);
+} catch (e) {
+  crossChurchFamilyBlocked = e.message.includes('Cross-church access rejected');
+}
+assert(crossChurchFamilyBlocked === true, 'Cross-church family creation is blocked even for admins');
+
+// Invitation role validation — only valid roles accepted
+function validateInviteRole(role) {
+  const VALID_ROLES = ['admin', 'team_member'];
+  return VALID_ROLES.includes(role) ? role : 'team_member';
+}
+assert(validateInviteRole('admin') === 'admin', 'Invite role admin is accepted');
+assert(validateInviteRole('team_member') === 'team_member', 'Invite role team_member is accepted');
+assert(validateInviteRole('driver') === 'team_member', 'Invite role driver is rejected and falls back to team_member');
+assert(validateInviteRole('superuser') === 'team_member', 'Unknown invite role falls back to team_member');
 
 
 // ── Test 14: Canonical Public URL & Share Message Formatting ──
@@ -570,4 +616,4 @@ assert(shareMsg.includes('🎵 View available Carol songs'), 'Share message cont
 assert(shareMsg.includes(canonicalUrl), 'Share message contains canonical URL');
 assert(shareMsg.endsWith(canonicalUrl), 'Share message places canonical URL below text');
 
-console.log('\n🎉 ALL 14 SECURITY, TENANT, SLUG, DRIVER, SONG & SHARE TESTS PASSED SUCCESSFULLY!\n');
+console.log('\n🎉 ALL SECURITY, TENANT, SLUG, TWO-ROLE, SONG & SHARE TESTS PASSED SUCCESSFULLY!\n');

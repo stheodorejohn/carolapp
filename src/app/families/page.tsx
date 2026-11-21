@@ -10,7 +10,8 @@ import { FamilyCard } from '@/components/cards/FamilyCard';
 import type { Family } from '@/types/database';
 
 export default function FamiliesPage() {
-  const { currentChurch } = useAuth();
+  const { currentChurch, churchMembership } = useAuth();
+  const isAdmin = churchMembership?.role === 'admin';
   const router = useRouter();
   const pathname = usePathname();
   const [families, setFamilies] = useState<Family[]>([]);
@@ -80,12 +81,14 @@ export default function FamiliesPage() {
             >
               <RefreshCw size={14} className={`text-slate-600 ${loading ? 'animate-spin' : ''}`} />
             </button>
-            <Link
-              href={currentChurch?.slug ? `/${currentChurch.slug}/families/new` : '/families/new'}
-              className="flex items-center gap-1.5 bg-green-700 text-white text-xs font-semibold px-3 py-2 rounded-full"
-            >
-              <Plus size={14} /> Add Family
-            </Link>
+            {isAdmin && (
+              <Link
+                href={currentChurch?.slug ? `/${currentChurch.slug}/families/new` : '/families/new'}
+                className="flex items-center gap-1.5 bg-green-700 text-white text-xs font-semibold px-3 py-2 rounded-full"
+              >
+                <Plus size={14} /> Add Family
+              </Link>
+            )}
           </div>
         </div>
         <div className="relative">

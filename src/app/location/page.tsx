@@ -32,13 +32,14 @@ const LiveMap = dynamic(() => import('@/components/map/LiveMap'), {
 });
 
 export default function CurrentLocationPage() {
-  const { currentChurch, authorizedRoles, activeRole, switchRole } = useAuth();
+  const { currentChurch, hasChurch } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
   const [group, setGroup] = useState<Group | null>(null);
   const [copied, setCopied] = useState(false);
 
-  const isAuthorizedToBroadcast = authorizedRoles.includes('driver') || authorizedRoles.includes('admin');
+  // All active church members (admin and team_member) can broadcast GPS.
+  const isAuthorizedToBroadcast = hasChurch;
 
   // Canonical slug route redirection
   useEffect(() => {
@@ -208,12 +209,12 @@ export default function CurrentLocationPage() {
               Start Live GPS Sharing
             </button>
           ) : (
-            <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-center">
-              <p className="text-xs font-semibold text-amber-900">
-                Driver Authorization Required
+            <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 text-center">
+              <p className="text-xs font-semibold text-slate-700">
+                Church Membership Required
               </p>
-              <p className="text-[11px] text-amber-700 mt-1 leading-relaxed">
-                Only designated Drivers and Administrators can broadcast vehicle GPS tracking.
+              <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">
+                You must be an active church member to share GPS location.
               </p>
             </div>
           )}

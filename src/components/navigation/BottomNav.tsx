@@ -10,7 +10,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Home, MapPin, Music, MoreHorizontal, Users, Navigation } from 'lucide-react';
+import { Home, MapPin, MoreHorizontal, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Suspense } from 'react';
 import { useAuth } from '@/lib/auth-context';
@@ -23,31 +23,15 @@ interface NavItem {
   icon: React.ComponentType<{ size?: number; strokeWidth?: number; className?: string }>;
 }
 
-function getNavItemsForRole(role: AppRole): NavItem[] {
-  switch (role) {
-    case 'admin':
-      return [
-        { id: 'today',    label: 'Today',    subpath: '/home',            icon: Home },
-        { id: 'families', label: 'Families', subpath: '/families',        icon: Users },
-        { id: 'route',    label: 'Route',    subpath: '/route',           icon: MapPin },
-        { id: 'more',     label: 'More',     subpath: '/admin/dashboard', icon: MoreHorizontal },
-      ];
-    case 'driver':
-      return [
-        { id: 'today', label: 'Today', subpath: '/home',            icon: Home },
-        { id: 'route', label: 'Route', subpath: '/route',           icon: MapPin },
-        { id: 'live',  label: 'Live',  subpath: '/location',        icon: Navigation },
-        { id: 'more',  label: 'More',  subpath: '/admin/dashboard', icon: MoreHorizontal },
-      ];
-    case 'team_member':
-    default:
-      return [
-        { id: 'today', label: 'Today', subpath: '/home',            icon: Home },
-        { id: 'route', label: 'Route', subpath: '/route',           icon: MapPin },
-        { id: 'songs', label: 'Songs', subpath: '/songs',           icon: Music },
-        { id: 'more',  label: 'More',  subpath: '/admin/dashboard', icon: MoreHorizontal },
-      ];
-  }
+function getNavItemsForRole(_role: AppRole): NavItem[] {
+  // Both admin and team_member share the same navigation.
+  // GPS sharing is an operational capability accessible to all members.
+  return [
+    { id: 'today',    label: 'Today',    subpath: '/home',            icon: Home },
+    { id: 'families', label: 'Families', subpath: '/families',        icon: Users },
+    { id: 'route',    label: 'Route',    subpath: '/route',           icon: MapPin },
+    { id: 'more',     label: 'More',     subpath: '/admin/dashboard', icon: MoreHorizontal },
+  ];
 }
 
 function isTabActive(id: NavItem['id'], pathname: string, slug?: string | null): boolean {

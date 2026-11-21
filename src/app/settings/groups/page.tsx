@@ -821,7 +821,6 @@ function SettingsTab() {
   const roleLabels: Record<string, string> = {
     admin: 'Administrator',
     team_member: 'Carol Team Member',
-    driver: 'Driver / Sharer',
   };
 
   return (

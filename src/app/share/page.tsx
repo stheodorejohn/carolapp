@@ -26,7 +26,7 @@ import { generateShareCard, type ShareCardResult } from '@/lib/share-card';
 import type { Group } from '@/types/database';
 
 export default function ShareLocationPage() {
-  const { currentChurch, authorizedRoles } = useAuth();
+  const { currentChurch, hasChurch } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
   const [group, setGroup] = useState<Group | null>(null);
@@ -37,7 +37,8 @@ export default function ShareLocationPage() {
   const [copiedText, setCopiedText] = useState(false);
   const [showTextPreview, setShowTextPreview] = useState(false);
 
-  const isDriverOrAdmin = authorizedRoles.includes('driver') || authorizedRoles.includes('admin');
+  // All active church members can access GPS controls and share the tracking link.
+  const isDriverOrAdmin = hasChurch;
 
   // Canonical slug route redirection
   useEffect(() => {
